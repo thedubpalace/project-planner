@@ -185,7 +185,7 @@ export function Gantt({
               {/* dependency lines */}
               <svg className="absolute inset-0 pointer-events-none" width={model.gridWidth} height={tasks.length * ROW_H} style={{ zIndex: 5 }}>
                 {model.depLines.map((l, i) => (
-                  <path key={i} d={l} fill="none" stroke="var(--gantt-dependency-line)" strokeWidth={2} strokeLinecap="round" />
+                  <path key={i} d={l} fill="none" stroke="var(--gantt-dependency-line)" strokeWidth={1.5} />
                 ))}
               </svg>
 
@@ -388,8 +388,7 @@ function buildModel(schedule: ProjectSchedule): Model {
       const x1 = predBar.left + predBar.plannedWidth;
       const y1 = predRow * ROW_H + ROW_H / 2;
       const x2 = succBar.left;
-      const midX = Math.max(x1 + 8, x2 - 8);
-      depLines.push(buildDependencyPath(x1, y1, x2, y2, midX));
+      depLines.push(buildDependencyPath(x1, y1, x2, y2));
     }
   }
 
