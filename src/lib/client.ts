@@ -31,8 +31,10 @@ export interface DashboardProject {
   unassignedCount: number;
 }
 
-async function req<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
+async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE_PATH}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
