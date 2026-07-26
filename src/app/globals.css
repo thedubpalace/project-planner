@@ -55,7 +55,7 @@
   --gantt-bar-progress-bg: var(--accent);
   --gantt-bar-done-bg: oklch(45% 0.13 145);
   --gantt-bar-late-bg: oklch(48% 0.17 25);
-  --gantt-dependency-line: oklch(72% 0.012 60);
+  --gantt-dependency-line: oklch(58% 0.2 255);
   --gantt-critical-ring: oklch(48% 0.17 25);
 
   /* skill-tag palette */
