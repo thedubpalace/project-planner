@@ -65,13 +65,15 @@ requirement; desktop/laptop browser is the primary context (dense data tool).
 
 ## Brand Commitments
 
-Inherits the Veda ecosystem's warm-dark visual language (already established in
-veda-dashboard and html-hub) so it reads as part of the same internal toolbox —
-`#0e0d0b`/`#161410` base, amber `#d97706` accent reserved for primary actions, red
+Light theme (superseded the initial warm-dark Veda inherit on explicit user
+request, referenced from an internal reporting-tool palette): warm-cream page
+background `#f7f4f0` with white card surfaces, deep wine `#7a1f49` as the sole
+accent (primary actions, active nav, in-progress fills, "today" marker), red
 reserved exclusively for genuine danger (deadline breach, unassigned task,
 overallocated resource) — never decorative. Typography: Inter (UI), Sarabun (Thai
 name fallback), JetBrains Mono (numeric/data-dense contexts). Register: **product**
-(daily-use internal tool — familiarity and scanability over visual novelty).
+(daily-use internal tool — familiarity and scanability over visual novelty). Full
+token spec lives in `DESIGN.md` at the project root.
 
 ## Evidence on Hand
 

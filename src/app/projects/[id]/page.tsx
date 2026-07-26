@@ -226,7 +226,7 @@ function ProjectResources({
           {unassignedCount} task{unassignedCount === 1 ? "" : "s"} in this project {unassignedCount === 1 ? "is" : "are"} unassigned.
         </div>
       )}
-      <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border-default)" }}>
+      <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border-default)", boxShadow: "var(--shadow-card)" }}>
         <table className="w-full border-collapse">
           <thead>
             <tr style={{ background: "var(--bg-surface)" }}>

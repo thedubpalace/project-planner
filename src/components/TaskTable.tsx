@@ -90,7 +90,7 @@ export function TaskTable({
   return (
     <div className="py-4">
       <Toolbar onAddTask={onAddTask} skills={allSkills} filter={filter} setFilter={setFilter} />
-      <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border-default)" }}>
+      <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border-default)", boxShadow: "var(--shadow-card)" }}>
         <table className="w-full border-collapse min-w-[820px]">
           <thead>
             <tr style={{ background: "var(--bg-surface)" }}>
@@ -182,7 +182,7 @@ export function TaskTable({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "oklch(0% 0 0 / 55%)" }} onClick={() => setConfirm(null)}>
           <div
             className="scale-in rounded-[10px] border p-5 max-w-[420px]"
-            style={{ background: "var(--bg-modal)", borderColor: "var(--status-danger-border)" }}
+            style={{ background: "var(--bg-modal)", borderColor: "var(--status-danger-border)", boxShadow: "var(--shadow-modal)" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="text-[14px] mb-2" style={{ color: "var(--text-primary)" }}>

@@ -26,7 +26,7 @@ export function Navbar() {
   return (
     <nav
       className="h-14 sticky top-0 z-30 flex items-center gap-8 px-6 border-b"
-      style={{ background: "var(--bg-surface)", borderColor: "var(--border-divider)" }}
+      style={{ background: "var(--bg-surface)", borderColor: "var(--border-divider)", boxShadow: "var(--shadow-nav)" }}
     >
       <Link href="/" className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
         project-planner

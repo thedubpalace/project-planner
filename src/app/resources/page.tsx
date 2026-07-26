@@ -86,7 +86,7 @@ export default function ResourcesPage() {
       ) : (
         <div
           className="rounded-lg border overflow-hidden"
-          style={{ borderColor: "var(--border-default)" }}
+          style={{ borderColor: "var(--border-default)", boxShadow: "var(--shadow-card)" }}
         >
           <table className="w-full border-collapse">
             <thead>

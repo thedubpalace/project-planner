@@ -240,7 +240,7 @@ export function Modal({
     >
       <div
         className="scale-in rounded-[10px] border"
-        style={{ width, maxWidth: "100%", background: "var(--bg-modal)", borderColor: "var(--border-default)" }}
+        style={{ width, maxWidth: "100%", background: "var(--bg-modal)", borderColor: "var(--border-default)", boxShadow: "var(--shadow-modal)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div
@@ -281,7 +281,7 @@ export function Drawer({
     <div className="fixed inset-0 z-50 flex justify-end" style={{ background: "oklch(0% 0 0 / 45%)" }} onClick={onClose}>
       <div
         className="drawer-in h-full overflow-y-auto border-l flex flex-col"
-        style={{ width, maxWidth: "100%", background: "var(--bg-modal)", borderColor: "var(--border-default)" }}
+        style={{ width, maxWidth: "100%", background: "var(--bg-modal)", borderColor: "var(--border-default)", boxShadow: "var(--shadow-modal)" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div
@@ -323,6 +323,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             style={{
               background: "var(--bg-modal)",
               borderColor: "var(--border-default)",
+              boxShadow: "var(--shadow-card)",
               color:
                 t.kind === "success"
                   ? "var(--status-good-text)"

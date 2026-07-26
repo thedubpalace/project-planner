@@ -1,67 +1,75 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   project-planner — warm-dark Veda theme (dark-only, no light branch)
+   project-planner — light theme (default). Warm-white surface, deep wine
+   accent, gray/green/amber/red status system — referenced from an internal
+   reporting-tool palette. Every component reads these tokens; no component
+   files change when the palette changes.
    ========================================================================== */
 
 :root {
-  /* Veda inherited base tokens */
-  --bg-base: #0e0d0b;
-  --bg-surface: #161410;
-  --bg-surface-hi: #1c1a15;
-  --bg-modal: #131109;
+  /* base surfaces */
+  --bg-base: #f7f4f0;
+  --bg-surface: #ffffff;
+  --bg-surface-hi: #f0ebe4;
+  --bg-modal: #ffffff;
 
-  --border-default: #2a2519;
-  --border-divider: #1f1c14;
-  --border-focus: #d97706;
+  --border-default: #e4ded4;
+  --border-divider: #ece7df;
+  --border-focus: var(--accent);
 
-  --text-primary: #f2ede4;
-  --text-secondary: #a39a88;
-  --text-muted: #635c4e;
-  --text-on-accent: #171310;
+  --text-primary: #26221d;
+  --text-secondary: #58524a;
+  --text-muted: #7a7369;
+  --text-on-accent: #ffffff;
 
-  --accent: #d97706;
-  --accent-dim: #2d2007;
-  --accent-border: #6b4a12;
-  --accent-text: #f0a030;
+  --accent: #7a1f49;
+  --accent-dim: #f7e6ee;
+  --accent-border: #c98ca9;
+  --accent-text: #7a1f49;
 
   /* status semantics */
-  --status-good-text: oklch(72% 0.18 145);
-  --status-good-bg: oklch(14% 0.05 145);
-  --status-good-border: oklch(30% 0.08 145);
+  --status-good-text: oklch(42% 0.13 145);
+  --status-good-bg: oklch(95% 0.035 145);
+  --status-good-border: oklch(82% 0.07 145);
 
-  --status-warning-text: oklch(78% 0.15 85);
-  --status-warning-bg: oklch(15% 0.05 85);
-  --status-warning-border: oklch(32% 0.08 85);
+  --status-warning-text: oklch(45% 0.13 85);
+  --status-warning-bg: oklch(95% 0.045 85);
+  --status-warning-border: oklch(83% 0.08 85);
 
-  --status-danger-text: oklch(72% 0.18 22);
-  --status-danger-bg: oklch(14% 0.06 22);
-  --status-danger-border: oklch(32% 0.09 22);
+  --status-danger-text: oklch(45% 0.17 25);
+  --status-danger-bg: oklch(95% 0.035 25);
+  --status-danger-border: oklch(82% 0.08 25);
 
   --status-neutral-text: var(--text-muted);
   --status-neutral-bg: var(--bg-surface-hi);
   --status-neutral-border: var(--border-default);
 
   /* Gantt tokens */
-  --gantt-grid-line: oklch(24% 0.02 60);
-  --gantt-weekend-col: oklch(12% 0.015 60);
+  --gantt-grid-line: oklch(90% 0.006 60);
+  --gantt-weekend-col: oklch(93% 0.01 60);
   --gantt-today-line: var(--accent);
-  --gantt-deadline-line: oklch(70% 0.18 22);
-  --gantt-bar-planned-bg: oklch(24% 0.02 60);
-  --gantt-bar-planned-border: oklch(45% 0.03 60);
+  --gantt-deadline-line: oklch(48% 0.17 25);
+  --gantt-bar-planned-bg: oklch(93% 0.008 60);
+  --gantt-bar-planned-border: oklch(75% 0.012 60);
   --gantt-bar-progress-bg: var(--accent);
-  --gantt-bar-done-bg: oklch(60% 0.14 145);
-  --gantt-bar-late-bg: oklch(62% 0.17 22);
-  --gantt-dependency-line: oklch(42% 0.02 60);
-  --gantt-critical-ring: oklch(70% 0.18 22);
+  --gantt-bar-done-bg: oklch(45% 0.13 145);
+  --gantt-bar-late-bg: oklch(48% 0.17 25);
+  --gantt-dependency-line: oklch(72% 0.012 60);
+  --gantt-critical-ring: oklch(48% 0.17 25);
 
   /* skill-tag palette */
-  --tag-violet-text: oklch(78% 0.14 275); --tag-violet-bg: oklch(15% 0.05 275); --tag-violet-border: oklch(34% 0.08 275);
-  --tag-blue-text: oklch(78% 0.13 240); --tag-blue-bg: oklch(15% 0.05 240); --tag-blue-border: oklch(34% 0.08 240);
-  --tag-cyan-text: oklch(80% 0.11 200); --tag-cyan-bg: oklch(15% 0.045 200); --tag-cyan-border: oklch(35% 0.07 200);
-  --tag-teal-text: oklch(78% 0.11 175); --tag-teal-bg: oklch(15% 0.045 175); --tag-teal-border: oklch(34% 0.07 175);
-  --tag-pink-text: oklch(78% 0.14 340); --tag-pink-bg: oklch(15% 0.05 340); --tag-pink-border: oklch(34% 0.08 340);
-  --tag-lime-text: oklch(80% 0.15 115); --tag-lime-bg: oklch(15% 0.05 115); --tag-lime-border: oklch(34% 0.08 115);
+  --tag-violet-text: oklch(42% 0.14 275); --tag-violet-bg: oklch(95% 0.03 275); --tag-violet-border: oklch(82% 0.07 275);
+  --tag-blue-text: oklch(42% 0.13 240); --tag-blue-bg: oklch(95% 0.03 240); --tag-blue-border: oklch(82% 0.07 240);
+  --tag-cyan-text: oklch(40% 0.1 200); --tag-cyan-bg: oklch(95% 0.025 200); --tag-cyan-border: oklch(82% 0.06 200);
+  --tag-teal-text: oklch(38% 0.1 175); --tag-teal-bg: oklch(95% 0.025 175); --tag-teal-border: oklch(82% 0.06 175);
+  --tag-pink-text: oklch(45% 0.14 340); --tag-pink-bg: oklch(95% 0.03 340); --tag-pink-border: oklch(82% 0.07 340);
+  --tag-lime-text: oklch(38% 0.11 115); --tag-lime-bg: oklch(94% 0.04 115); --tag-lime-border: oklch(80% 0.08 115);
+
+  /* elevation (new for light mode — dark theme relied on borders only) */
+  --shadow-nav: 0 1px 3px oklch(25% 0.02 60 / 6%);
+  --shadow-card: 0 1px 2px oklch(25% 0.02 60 / 5%), 0 6px 16px oklch(25% 0.02 60 / 6%);
+  --shadow-modal: 0 12px 32px oklch(20% 0.02 60 / 16%), 0 2px 8px oklch(20% 0.02 60 / 10%);
 
   /* easing */
   --ease-panel: cubic-bezier(0.22, 1, 0.36, 1);

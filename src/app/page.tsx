@@ -39,7 +39,7 @@ export default function Dashboard() {
             <div
               key={i}
               className="rounded-[10px] border p-5 h-[132px]"
-              style={{ borderColor: "var(--border-default)", background: "var(--bg-surface)" }}
+              style={{ borderColor: "var(--border-default)", background: "var(--bg-surface)", boxShadow: "var(--shadow-card)" }}
             >
               <div className="sk h-4 w-1/2 mb-4" />
               <div className="sk h-1.5 w-full mb-4" />
@@ -88,8 +88,8 @@ function ProjectCard({ p }: { p: DashboardProject }) {
   return (
     <Link
       href={`/projects/${p.id}`}
-      className="block rounded-[10px] border p-5 transition-[transform,background,border-color] duration-150 hover:-translate-y-px"
-      style={{ borderColor: "var(--border-default)", background: "var(--bg-surface)" }}
+      className="block rounded-[10px] border p-5 transition-[transform,background,border-color,box-shadow] duration-150 hover:-translate-y-px"
+      style={{ borderColor: "var(--border-default)", background: "var(--bg-surface)", boxShadow: "var(--shadow-card)" }}
     >
       <div className="flex items-start justify-between gap-3 mb-4">
         <div className="text-[14px] font-medium truncate" style={{ color: "var(--text-primary)" }}>
