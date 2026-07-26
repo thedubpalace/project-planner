@@ -7,6 +7,7 @@ import { Button } from "./ui";
 export function Navbar() {
   const pathname = usePathname();
   const onDashboard = pathname === "/";
+  const onPortfolio = pathname.startsWith("/portfolio");
   const onResources = pathname.startsWith("/resources");
 
   const cta = onDashboard
@@ -33,6 +34,9 @@ export function Navbar() {
       <div className="flex items-center gap-6">
         <Link href="/" className={linkCls(onDashboard)}>
           Projects
+        </Link>
+        <Link href="/portfolio" className={linkCls(onPortfolio)}>
+          Portfolio
         </Link>
         <Link href="/resources" className={linkCls(onResources)}>
           Resources
