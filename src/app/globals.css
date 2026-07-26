@@ -1,26 +1,190 @@
 @import "tailwindcss";
 
+/* ============================================================================
+   project-planner — warm-dark Veda theme (dark-only, no light branch)
+   ========================================================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Veda inherited base tokens */
+  --bg-base: #0e0d0b;
+  --bg-surface: #161410;
+  --bg-surface-hi: #1c1a15;
+  --bg-modal: #131109;
+
+  --border-default: #2a2519;
+  --border-divider: #1f1c14;
+  --border-focus: #d97706;
+
+  --text-primary: #f2ede4;
+  --text-secondary: #a39a88;
+  --text-muted: #635c4e;
+  --text-on-accent: #171310;
+
+  --accent: #d97706;
+  --accent-dim: #2d2007;
+  --accent-border: #6b4a12;
+  --accent-text: #f0a030;
+
+  /* status semantics */
+  --status-good-text: oklch(72% 0.18 145);
+  --status-good-bg: oklch(14% 0.05 145);
+  --status-good-border: oklch(30% 0.08 145);
+
+  --status-warning-text: oklch(78% 0.15 85);
+  --status-warning-bg: oklch(15% 0.05 85);
+  --status-warning-border: oklch(32% 0.08 85);
+
+  --status-danger-text: oklch(72% 0.18 22);
+  --status-danger-bg: oklch(14% 0.06 22);
+  --status-danger-border: oklch(32% 0.09 22);
+
+  --status-neutral-text: var(--text-muted);
+  --status-neutral-bg: var(--bg-surface-hi);
+  --status-neutral-border: var(--border-default);
+
+  /* Gantt tokens */
+  --gantt-grid-line: oklch(24% 0.02 60);
+  --gantt-weekend-col: oklch(12% 0.015 60);
+  --gantt-today-line: var(--accent);
+  --gantt-deadline-line: oklch(70% 0.18 22);
+  --gantt-bar-planned-bg: oklch(24% 0.02 60);
+  --gantt-bar-planned-border: oklch(45% 0.03 60);
+  --gantt-bar-progress-bg: var(--accent);
+  --gantt-bar-done-bg: oklch(60% 0.14 145);
+  --gantt-bar-late-bg: oklch(62% 0.17 22);
+  --gantt-dependency-line: oklch(42% 0.02 60);
+  --gantt-critical-ring: oklch(70% 0.18 22);
+
+  /* skill-tag palette */
+  --tag-violet-text: oklch(78% 0.14 275); --tag-violet-bg: oklch(15% 0.05 275); --tag-violet-border: oklch(34% 0.08 275);
+  --tag-blue-text: oklch(78% 0.13 240); --tag-blue-bg: oklch(15% 0.05 240); --tag-blue-border: oklch(34% 0.08 240);
+  --tag-cyan-text: oklch(80% 0.11 200); --tag-cyan-bg: oklch(15% 0.045 200); --tag-cyan-border: oklch(35% 0.07 200);
+  --tag-teal-text: oklch(78% 0.11 175); --tag-teal-bg: oklch(15% 0.045 175); --tag-teal-border: oklch(34% 0.07 175);
+  --tag-pink-text: oklch(78% 0.14 340); --tag-pink-bg: oklch(15% 0.05 340); --tag-pink-border: oklch(34% 0.08 340);
+  --tag-lime-text: oklch(80% 0.15 115); --tag-lime-bg: oklch(15% 0.05 115); --tag-lime-border: oklch(34% 0.08 115);
+
+  /* easing */
+  --ease-panel: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snap: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-fade: cubic-bezier(0, 0, 0.2, 1);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg-base: var(--bg-base);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-surface-hi: var(--bg-surface-hi);
+  --color-bg-modal: var(--bg-modal);
+  --color-border-default: var(--border-default);
+  --color-border-divider: var(--border-divider);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-text: var(--accent-text);
+  --color-status-good: var(--status-good-text);
+  --color-status-warning: var(--status-warning-text);
+  --color-status-danger: var(--status-danger-text);
+
+  --font-sans: var(--font-inter), var(--font-sarabun), system-ui, sans-serif;
+  --font-mono: var(--font-mono-jb), "Fira Code", monospace;
+
+  --text-xs: 10px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 13px;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-inter), var(--font-sarabun), system-ui, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: var(--font-mono-jb), "Fira Code", monospace;
+}
+
+::placeholder {
+  color: var(--text-muted);
+}
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  background: var(--bg-base);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 13px;
+  width: 100%;
+  outline: none;
+}
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--border-focus);
+}
+
+/* skeleton pulse */
+@keyframes skPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+.sk {
+  background: var(--border-default);
+  border-radius: 4px;
+  animation: skPulse 1.5s ease-in-out infinite;
+}
+
+/* drawer / modal entrance */
+@keyframes drawerIn {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes ringPulse {
+  0% { outline-color: var(--gantt-critical-ring); }
+  50% { outline-color: transparent; }
+  100% { outline-color: var(--gantt-critical-ring); }
+}
+.drawer-in { animation: drawerIn 260ms var(--ease-panel); }
+.fade-in { animation: fadeIn 150ms var(--ease-fade); }
+.scale-in { animation: scaleIn 180ms var(--ease-panel); }
+.bar-shift { transition: left 400ms var(--ease-snap), width 400ms var(--ease-snap); }
+.bar-pulse { outline: 2px solid var(--gantt-critical-ring); outline-offset: 1px; animation: ringPulse 800ms var(--ease-snap); }
+
+/* scrollbars */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-border); }
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+  .bar-pulse { animation: none; outline: 2px solid var(--gantt-critical-ring); }
 }
