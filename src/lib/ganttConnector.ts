@@ -1,12 +1,18 @@
-// Shared right-angle elbow path builder for Gantt dependency connectors.
-// Used by both Gantt.tsx (single project) and PortfolioGantt.tsx (grouped).
+// Shared right-angle double-elbow ("S/Z zigzag") path builder for Gantt
+// dependency connectors. Used by both Gantt.tsx (single project) and
+// PortfolioGantt.tsx (grouped).
+//
+// A single elbow (H-V-H) always reads as a hook/bracket, since both
+// horizontal runs point the same direction regardless of where the bend
+// sits. This instead jogs a short, fixed distance out of the predecessor,
+// drops to the vertical midpoint, then travels to the successor's column
+// (right for the common wide-gap case, left when the successor starts at
+// or near the predecessor's end column) before dropping in — the same
+// formula produces a proper alternating-direction zigzag in both cases.
 
 export function buildDependencyPath(x1: number, y1: number, x2: number, y2: number): string {
-  // Center the bend between the two bars. Previously this was pinned close to
-  // x2 (`max(x1+8, x2-8)` resolves to x2-8 whenever the gap exceeds 16px),
-  // which crammed both corners into one compact hook next to the target bar
-  // instead of a spread-out step — falls back to the old clamp only when the
-  // bars are close enough that a true midpoint would sit under either bar.
-  const midX = Math.max(x1 + 8, Math.min(x2 - 8, (x1 + x2) / 2));
-  return `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2} ${y2}`;
+  const jog = 8;
+  const midX = x1 + jog;
+  const midY = (y1 + y2) / 2;
+  return `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${midY} L ${x2} ${midY} L ${x2} ${y2}`;
 }
