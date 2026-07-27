@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useRef } from "react";
-import { addDays, differenceInCalendarDays, format, isWeekend, parseISO, startOfWeek } from "date-fns";
+import { addDays, differenceInCalendarDays, format, parseISO, startOfWeek } from "date-fns";
 import type { DashboardProject } from "@/lib/client";
 import type { ScheduledTask } from "@/lib/types";
 import { buildDependencyPath } from "@/lib/ganttConnector";
@@ -173,11 +173,6 @@ export function PortfolioGantt({
                   >
                     {c.label}
                   </span>
-                  {model.unit === "day" && (
-                    <span className="mono text-[9px]" style={{ color: "var(--text-muted)" }}>
-                      {c.sub}
-                    </span>
-                  )}
                 </div>
               ))}
             </div>
@@ -470,11 +465,13 @@ function buildModel(projects: DashboardProject[], collapsed: Set<number>): Model
   }
   let rangeStart = addDays(min, -2);
   const rangeEnd = addDays(max, 3);
-  const totalDaysSpan = differenceInCalendarDays(rangeEnd, rangeStart) + 1;
-  const unit: "day" | "week" = totalDaysSpan > 90 ? "week" : "day";
-  const unitDays = unit === "week" ? 7 : 1;
-  const colW = unit === "week" ? 48 : 32;
-  if (unit === "week") rangeStart = startOfWeek(rangeStart, { weekStartsOn: 1 });
+  // Portfolio is a cross-project overview — always one column per week
+  // (unlike the single-project Timeline, which adapts day/week to that
+  // project's own span).
+  const unit: "day" | "week" = "week";
+  const unitDays = 7;
+  const colW = 48;
+  rangeStart = startOfWeek(rangeStart, { weekStartsOn: 1 });
 
   const columnCount = Math.ceil((differenceInCalendarDays(rangeEnd, rangeStart) + 1) / unitDays);
   const gridWidth = columnCount * colW;
@@ -483,16 +480,7 @@ function buildModel(projects: DashboardProject[], collapsed: Set<number>): Model
   const columns: Column[] = [];
   for (let i = 0; i < columnCount; i++) {
     const colDate = addDays(rangeStart, i * unitDays);
-    if (unit === "day") {
-      columns.push({
-        label: format(colDate, "d"),
-        sub: format(colDate, "EEEEE"),
-        weekend: isWeekend(colDate),
-        emphasize: colDate.getDay() === 1,
-      });
-    } else {
-      columns.push({ label: format(colDate, "MMM d"), sub: "", weekend: false, emphasize: true });
-    }
+    columns.push({ label: format(colDate, "MMM d"), sub: "", weekend: false, emphasize: true });
   }
 
   // rows with layout (group header + tasks when expanded)
