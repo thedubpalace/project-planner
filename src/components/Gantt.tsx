@@ -196,6 +196,9 @@ export function Gantt({
                 {model.depLines.map((l, i) => (
                   <path key={i} d={l} fill="none" stroke="var(--gantt-dependency-line)" strokeWidth={1.5} />
                 ))}
+                {model.forecastDepLines.map((l, i) => (
+                  <path key={i} d={l} fill="none" stroke="var(--gantt-forecast-border)" strokeWidth={1.5} strokeDasharray="4 3" />
+                ))}
               </svg>
 
               {/* bars */}
@@ -335,6 +338,7 @@ interface Model {
   gridWidth: number;
   bars: Map<number, Bar>;
   depLines: string[];
+  forecastDepLines: string[];
   todayX: number | null;
   deadlineX: number | null;
 }
@@ -451,6 +455,36 @@ function buildModel(schedule: ProjectSchedule): Model {
     }
   }
 
+  // forecast dependency lines — same edges, but only where the predecessor
+  // has a forecast delay (own or cascaded); skipped entirely otherwise.
+  // Lands on the successor's forecast position when it has one too, else
+  // its ordinary planned bar (the delay hasn't (yet) pushed it).
+  const forecastDepLines: string[] = [];
+  for (const t of tasks) {
+    const succRow = rowOf.get(t.id);
+    if (succRow == null) continue;
+    const succBar = bars.get(t.id)!;
+    const y2 = succRow * ROW_H + ROW_H / 2;
+    for (const depId of t.dependsOn) {
+      const predRow = rowOf.get(depId);
+      const predBar = bars.get(depId);
+      if (predRow == null || !predBar) continue;
+      const predForecastRight = predBar.forecastOverrun
+        ? predBar.forecastOverrun.left + predBar.forecastOverrun.width
+        : predBar.forecastGhost
+          ? predBar.forecastGhost.left + predBar.forecastGhost.width
+          : null;
+      if (predForecastRight == null) continue;
+      const succForecastLeft = succBar.forecastGhost
+        ? succBar.forecastGhost.left // cascaded: whole bar previewed elsewhere
+        : succBar.forecastOverrun
+          ? succBar.left + succBar.plannedWidth // own delay: land where its own hatch starts
+          : succBar.left; // no forecast at all: land on its planned bar
+      const y1 = predRow * ROW_H + ROW_H / 2;
+      forecastDepLines.push(buildDependencyPath(predForecastRight, y1, succForecastLeft, y2));
+    }
+  }
+
   const todayX = x(today);
   const deadlineX = x(d(schedule.deadline));
 
@@ -461,6 +495,7 @@ function buildModel(schedule: ProjectSchedule): Model {
     gridWidth,
     bars,
     depLines,
+    forecastDepLines,
     todayX: todayX >= 0 && todayX <= gridWidth ? todayX : null,
     deadlineX: deadlineX >= 0 && deadlineX <= gridWidth ? deadlineX : null,
   };

@@ -239,6 +239,9 @@ export function PortfolioGantt({
                 {model.depLines.map((l, i) => (
                   <path key={i} d={l} fill="none" stroke="var(--gantt-dependency-line)" strokeWidth={1.5} />
                 ))}
+                {model.forecastDepLines.map((l, i) => (
+                  <path key={i} d={l} fill="none" stroke="var(--gantt-forecast-border)" strokeWidth={1.5} strokeDasharray="4 3" />
+                ))}
               </svg>
 
               {/* bars */}
@@ -439,6 +442,7 @@ interface Model {
   rows: Row[];
   bars: Map<number, Bar>;
   depLines: string[];
+  forecastDepLines: string[];
   todayX: number | null;
   deadlineMarkers: DeadlineMarker[];
   totalHeight: number;
@@ -571,6 +575,35 @@ function buildModel(projects: DashboardProject[], collapsed: Set<number>): Model
     }
   }
 
+  // forecast dependency lines — same edges, but only where the predecessor
+  // has a forecast delay (own or cascaded); skipped entirely otherwise.
+  // Lands on the successor's forecast position when it has one too, else
+  // its ordinary planned bar (the delay hasn't (yet) pushed it).
+  const forecastDepLines: string[] = [];
+  for (const row of rows) {
+    if (row.kind !== "task") continue;
+    const t = row.task!;
+    const succBar = bars.get(t.id)!;
+    const y2 = succBar.top + ROW_H / 2;
+    for (const depId of t.dependsOn) {
+      const predBar = bars.get(depId);
+      if (!predBar) continue;
+      const predForecastRight = predBar.forecastOverrun
+        ? predBar.forecastOverrun.left + predBar.forecastOverrun.width
+        : predBar.forecastGhost
+          ? predBar.forecastGhost.left + predBar.forecastGhost.width
+          : null;
+      if (predForecastRight == null) continue;
+      const succForecastLeft = succBar.forecastGhost
+        ? succBar.forecastGhost.left
+        : succBar.forecastOverrun
+          ? succBar.left + succBar.plannedWidth
+          : succBar.left;
+      const y1 = predBar.top + ROW_H / 2;
+      forecastDepLines.push(buildDependencyPath(predForecastRight, y1, succForecastLeft, y2));
+    }
+  }
+
   const todayX0 = x(today);
   const todayX = todayX0 >= 0 && todayX0 <= gridWidth ? todayX0 : null;
 
@@ -582,5 +615,5 @@ function buildModel(projects: DashboardProject[], collapsed: Set<number>): Model
     deadlineMarkers.push({ x: dx, top: span.top, height: span.bottom - span.top, label: p.name });
   }
 
-  return { unit, colW, columns, gridWidth, rows, bars, depLines, todayX, deadlineMarkers, totalHeight };
+  return { unit, colW, columns, gridWidth, rows, bars, depLines, forecastDepLines, todayX, deadlineMarkers, totalHeight };
 }
