@@ -59,6 +59,8 @@
   --gantt-critical-ring: oklch(48% 0.17 25);
   --gantt-forecast-bg: oklch(88% 0.1 85);
   --gantt-forecast-border: oklch(55% 0.15 85);
+  --gantt-forecast-stripe: oklch(55% 0.15 85 / 55%); /* softer hatch line than a solid border */
+  --gantt-forecast-ghost-bg: oklch(88% 0.1 85 / 30%); /* light wash so the cascaded-preview outline reads as a shape, not just a thin line lost among other dashed elements */
 
   /* skill-tag palette */
   --tag-violet-text: oklch(42% 0.14 275); --tag-violet-bg: oklch(95% 0.03 275); --tag-violet-border: oklch(82% 0.07 275);

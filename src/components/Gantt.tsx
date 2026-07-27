@@ -428,7 +428,7 @@ export function Gantt({
                           height: 20,
                           background: "var(--gantt-forecast-bg)",
                           backgroundImage:
-                            "repeating-linear-gradient(45deg, var(--gantt-forecast-border) 0, var(--gantt-forecast-border) 2px, transparent 2px, transparent 6px)",
+                            "repeating-linear-gradient(45deg, var(--gantt-forecast-stripe) 0, var(--gantt-forecast-stripe) 1.5px, transparent 1.5px, transparent 9px)",
                           border: "1px solid var(--gantt-forecast-border)",
                           zIndex: 4,
                           pointerEvents: "none",
@@ -445,6 +445,7 @@ export function Gantt({
                           width: b.forecastGhost.width,
                           top: (ROW_H - 20) / 2,
                           height: 20,
+                          background: "var(--gantt-forecast-ghost-bg)",
                           border: "1.5px dashed var(--gantt-forecast-border)",
                           zIndex: 4,
                           pointerEvents: "none",
