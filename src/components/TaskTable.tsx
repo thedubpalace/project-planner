@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/client";
 import type { ProjectSchedule, ScheduledTask } from "@/lib/types";
+import { groupTasks } from "@/lib/taskGroup";
 import {
   Button,
   SkillChip,
@@ -12,16 +13,6 @@ import {
 } from "./ui";
 
 const STEPS = [0, 25, 50, 75, 100];
-
-// Tasks named "Process name [Role]" (e.g. a BA/Dev/QA split of one row from
-// an import) are clustered together under a shared group header instead of
-// scattering across the table by planned date. Plain task names (no bracket
-// suffix) are untouched — they render exactly as before, no header row.
-const ROLE_ORDER: Record<string, number> = { BA: 0, Dev: 1, QA: 2 };
-function taskGroupKey(name: string): { base: string; suffix: string | null } {
-  const m = name.match(/^(.*) \[([^[\]]+)\]$/);
-  return m ? { base: m[1], suffix: m[2] } : { base: name, suffix: null };
-}
 
 export function TaskTable({
   schedule,
@@ -44,22 +35,7 @@ export function TaskTable({
 
   // Cluster same-group tasks together; groups themselves stay in roughly
   // chronological order (by their earliest planned start).
-  const grouped = useMemo(() => {
-    const withKeys = shown.map((t) => ({ t, ...taskGroupKey(t.name) }));
-    const groupStart = new Map<string, number>();
-    for (const { t, base } of withKeys) {
-      const ts = new Date(t.plannedStart).getTime();
-      if (!groupStart.has(base) || ts < groupStart.get(base)!) groupStart.set(base, ts);
-    }
-    return withKeys.sort((a, b) => {
-      const byGroup = groupStart.get(a.base)! - groupStart.get(b.base)!;
-      if (byGroup !== 0) return byGroup;
-      if (a.base !== b.base) return a.base.localeCompare(b.base);
-      const ra = a.suffix ? ROLE_ORDER[a.suffix] ?? 99 : 99;
-      const rb = b.suffix ? ROLE_ORDER[b.suffix] ?? 99 : 99;
-      return ra !== rb ? ra - rb : a.t.id - b.t.id;
-    });
-  }, [shown]);
+  const grouped = useMemo(() => groupTasks(shown), [shown]);
 
   const setProgress = async (t: ScheduledTask, pct: number) => {
     try {

@@ -4,9 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, differenceInCalendarDays, format, isWeekend, parseISO, startOfWeek } from "date-fns";
 import type { ProjectSchedule, ScheduledTask } from "@/lib/types";
 import { buildDependencyPath } from "@/lib/ganttConnector";
+import { groupTasks } from "@/lib/taskGroup";
 import { StatusPill, fmtDate, taskPill } from "./ui";
 
 const ROW_H = 36;
+const HEADER_H = 24;
 
 function d(iso: string): Date {
   return parseISO(iso + "T00:00:00");
@@ -42,6 +44,7 @@ export function Gantt({
   }, [tasks]);
 
   const model = useMemo(() => buildModel(schedule), [schedule]);
+  const mobileOrder = useMemo(() => groupTasks(tasks).map((g) => g.t), [tasks]);
 
   if (tasks.length === 0) {
     return (
@@ -69,7 +72,7 @@ export function Gantt({
         <div className="text-[12px] mb-1" style={{ color: "var(--text-muted)" }}>
           View full timeline on a larger screen
         </div>
-        {tasks.map((t) => (
+        {mobileOrder.map((t) => (
           <div
             key={t.id}
             className="flex items-center justify-between rounded-md border px-3 py-2"
@@ -103,34 +106,44 @@ export function Gantt({
             style={{ height: 40, background: "var(--bg-surface)", color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}>
             Task
           </div>
-          {tasks.map((t) => (
-            <div
-              key={t.id}
-              onClick={() => onEditTask(t)}
-              className="flex items-center gap-2 px-3 cursor-pointer hover:bg-[var(--bg-surface-hi)]"
-              style={{ height: ROW_H, borderBottom: "1px solid var(--border-divider)" }}
-            >
-              <span className="text-[13px] truncate flex-1" style={{ color: "var(--text-primary)" }}>
-                {t.name}
-              </span>
-              {t.forecastEnd && (
-                <span
-                  className="text-[9px] mono whitespace-nowrap"
-                  style={{ color: "var(--gantt-forecast-border)" }}
-                  title={`Forecast finish at current pace: ${fmtDate(t.forecastEnd)}`}
-                >
-                  → {fmtDate(t.forecastEnd, false)}
+          {model.rows.map((row) =>
+            row.kind === "group" ? (
+              <div
+                key={`g${row.base}`}
+                className="flex items-center px-3 text-[10px] font-semibold uppercase tracking-[0.03em]"
+                style={{ height: HEADER_H, background: "var(--bg-surface-hi)", color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}
+              >
+                <span className="truncate">{row.base}</span>
+              </div>
+            ) : (
+              <div
+                key={row.task!.id}
+                onClick={() => onEditTask(row.task!)}
+                className="flex items-center gap-2 px-3 cursor-pointer hover:bg-[var(--bg-surface-hi)]"
+                style={{ height: ROW_H, borderBottom: "1px solid var(--border-divider)" }}
+              >
+                <span className="text-[13px] truncate flex-1" style={{ color: "var(--text-primary)" }}>
+                  {row.task!.name}
                 </span>
-              )}
-              {t.isUnassigned ? (
-                <span className="text-[10px] whitespace-nowrap" style={{ color: "var(--status-danger-text)" }}>
-                  ⚠ Unassigned
-                </span>
-              ) : (
-                <Initials name={t.resourceName ?? ""} />
-              )}
-            </div>
-          ))}
+                {row.task!.forecastEnd && (
+                  <span
+                    className="text-[9px] mono whitespace-nowrap"
+                    style={{ color: "var(--gantt-forecast-border)" }}
+                    title={`Forecast finish at current pace: ${fmtDate(row.task!.forecastEnd)}`}
+                  >
+                    → {fmtDate(row.task!.forecastEnd, false)}
+                  </span>
+                )}
+                {row.task!.isUnassigned ? (
+                  <span className="text-[10px] whitespace-nowrap" style={{ color: "var(--status-danger-text)" }}>
+                    ⚠ Unassigned
+                  </span>
+                ) : (
+                  <Initials name={row.task!.resourceName ?? ""} />
+                )}
+              </div>
+            ),
+          )}
         </div>
 
         {/* grid */}
@@ -167,7 +180,7 @@ export function Gantt({
             </div>
 
             {/* body */}
-            <div style={{ position: "relative", height: tasks.length * ROW_H }}>
+            <div style={{ position: "relative", height: model.totalHeight }}>
               {/* column backgrounds */}
               <div className="absolute inset-0 flex pointer-events-none">
                 {model.columns.map((c, i) => (
@@ -183,16 +196,27 @@ export function Gantt({
                 ))}
               </div>
 
+              {/* group header bands (align with left pane group rows) */}
+              {model.rows.map((row) =>
+                row.kind === "group" ? (
+                  <div
+                    key={`gb${row.base}`}
+                    className="absolute left-0 right-0"
+                    style={{ top: row.top, height: row.height, background: "var(--bg-surface-hi)", borderBottom: "1px solid var(--border-divider)" }}
+                  />
+                ) : null,
+              )}
+
               {/* today + deadline markers */}
               {model.todayX != null && (
-                <Marker x={model.todayX} color="var(--gantt-today-line)" label="Today" labelColor="var(--accent-text)" />
+                <Marker x={model.todayX} height={model.totalHeight} color="var(--gantt-today-line)" label="Today" labelColor="var(--accent-text)" />
               )}
               {model.deadlineX != null && (
-                <Marker x={model.deadlineX} color="var(--gantt-deadline-line)" label="Deadline" labelColor="var(--status-danger-text)" dashed />
+                <Marker x={model.deadlineX} height={model.totalHeight} color="var(--gantt-deadline-line)" label="Deadline" labelColor="var(--status-danger-text)" dashed />
               )}
 
               {/* dependency lines */}
-              <svg className="absolute inset-0 pointer-events-none" width={model.gridWidth} height={tasks.length * ROW_H} style={{ zIndex: 5 }}>
+              <svg className="absolute inset-0 pointer-events-none" width={model.gridWidth} height={model.totalHeight} style={{ zIndex: 5 }}>
                 {model.depLines.map((l, i) => (
                   <path key={i} d={l} fill="none" stroke="var(--gantt-dependency-line)" strokeWidth={1.5} />
                 ))}
@@ -202,10 +226,12 @@ export function Gantt({
               </svg>
 
               {/* bars */}
-              {tasks.map((t, idx) => {
+              {model.rows.map((row) => {
+                if (row.kind !== "task") return null;
+                const t = row.task!;
                 const b = model.bars.get(t.id)!;
                 return (
-                  <div key={t.id} className="absolute" style={{ top: idx * ROW_H, height: ROW_H, left: 0, right: 0 }}>
+                  <div key={t.id} className="absolute" style={{ top: b.top, height: ROW_H, left: 0, right: 0 }}>
                     {/* planned ghost */}
                     <div
                       className="absolute rounded"
@@ -288,9 +314,9 @@ export function Gantt({
   );
 }
 
-function Marker({ x, color, label, labelColor, dashed }: { x: number; color: string; label: string; labelColor: string; dashed?: boolean }) {
+function Marker({ x, height, color, label, labelColor, dashed }: { x: number; height: number; color: string; label: string; labelColor: string; dashed?: boolean }) {
   return (
-    <div className="absolute top-0 bottom-0 pointer-events-none" style={{ left: x, zIndex: 7 }}>
+    <div className="absolute top-0 pointer-events-none" style={{ left: x, height, zIndex: 7 }}>
       <div style={{ width: 0, height: "100%", borderLeft: `2px ${dashed ? "dashed" : "solid"} ${color}` }} />
       <span
         className="absolute top-0 text-[9px] mono px-1 whitespace-nowrap"
@@ -323,6 +349,7 @@ interface Column {
   emphasize: boolean;
 }
 interface Bar {
+  top: number;
   left: number;
   plannedWidth: number;
   fg: { left: number; width: number; color: string } | null;
@@ -331,16 +358,25 @@ interface Bar {
   forecastOverrun: { left: number; width: number } | null; // hatched tail past the plan, own delay
   forecastGhost: { left: number; width: number } | null; // shifted preview, cascaded from a predecessor
 }
+interface Row {
+  kind: "group" | "task";
+  top: number;
+  height: number;
+  base: string;
+  task?: ScheduledTask;
+}
 interface Model {
   unit: "day" | "week";
   colW: number;
   columns: Column[];
   gridWidth: number;
+  rows: Row[];
   bars: Map<number, Bar>;
   depLines: string[];
   forecastDepLines: string[];
   todayX: number | null;
   deadlineX: number | null;
+  totalHeight: number;
 }
 
 function buildModel(schedule: ProjectSchedule): Model {
@@ -388,11 +424,27 @@ function buildModel(schedule: ProjectSchedule): Model {
     }
   }
 
-  const bars = new Map<number, Bar>();
-  const rowOf = new Map<number, number>();
-  tasks.forEach((t, i) => rowOf.set(t.id, i));
+  // rows: group header + tasks, clustering "Process [Role]"-named tasks
+  const rows: Row[] = [];
+  const grouped = groupTasks(tasks);
+  let y = 0;
+  let lastBase = "";
+  for (const { t, base, suffix } of grouped) {
+    const isNewGroup = !!suffix && base !== lastBase;
+    if (isNewGroup) {
+      rows.push({ kind: "group", top: y, height: HEADER_H, base });
+      y += HEADER_H;
+    }
+    lastBase = suffix ? base : "";
+    rows.push({ kind: "task", top: y, height: ROW_H, base, task: t });
+    y += ROW_H;
+  }
+  const totalHeight = y;
 
-  for (const t of tasks) {
+  const bars = new Map<number, Bar>();
+  for (const row of rows) {
+    if (row.kind !== "task") continue;
+    const t = row.task!;
     const left = x(d(t.plannedStart));
     const plannedRight = x(addDays(d(t.plannedEnd), 1));
     const plannedWidth = Math.max(6, plannedRight - left);
@@ -434,22 +486,20 @@ function buildModel(schedule: ProjectSchedule): Model {
       }
     }
 
-    bars.set(t.id, { left, plannedWidth, fg, ring: t.overDeadline, aria, forecastOverrun, forecastGhost });
+    bars.set(t.id, { top: row.top, left, plannedWidth, fg, ring: t.overDeadline, aria, forecastOverrun, forecastGhost });
   }
 
   // dependency elbow lines
   const depLines: string[] = [];
   for (const t of tasks) {
-    const succRow = rowOf.get(t.id);
-    if (succRow == null) continue;
-    const succBar = bars.get(t.id)!;
-    const y2 = succRow * ROW_H + ROW_H / 2;
+    const succBar = bars.get(t.id);
+    if (!succBar) continue;
+    const y2 = succBar.top + ROW_H / 2;
     for (const depId of t.dependsOn) {
-      const predRow = rowOf.get(depId);
       const predBar = bars.get(depId);
-      if (predRow == null || !predBar) continue;
+      if (!predBar) continue;
       const x1 = predBar.left + predBar.plannedWidth;
-      const y1 = predRow * ROW_H + ROW_H / 2;
+      const y1 = predBar.top + ROW_H / 2;
       const x2 = succBar.left;
       depLines.push(buildDependencyPath(x1, y1, x2, y2));
     }
@@ -461,14 +511,12 @@ function buildModel(schedule: ProjectSchedule): Model {
   // its ordinary planned bar (the delay hasn't (yet) pushed it).
   const forecastDepLines: string[] = [];
   for (const t of tasks) {
-    const succRow = rowOf.get(t.id);
-    if (succRow == null) continue;
-    const succBar = bars.get(t.id)!;
-    const y2 = succRow * ROW_H + ROW_H / 2;
+    const succBar = bars.get(t.id);
+    if (!succBar) continue;
+    const y2 = succBar.top + ROW_H / 2;
     for (const depId of t.dependsOn) {
-      const predRow = rowOf.get(depId);
       const predBar = bars.get(depId);
-      if (predRow == null || !predBar) continue;
+      if (!predBar) continue;
       const predForecastRight = predBar.forecastOverrun
         ? predBar.forecastOverrun.left + predBar.forecastOverrun.width
         : predBar.forecastGhost
@@ -480,7 +528,7 @@ function buildModel(schedule: ProjectSchedule): Model {
         : succBar.forecastOverrun
           ? succBar.left + succBar.plannedWidth // own delay: land where its own hatch starts
           : succBar.left; // no forecast at all: land on its planned bar
-      const y1 = predRow * ROW_H + ROW_H / 2;
+      const y1 = predBar.top + ROW_H / 2;
       forecastDepLines.push(buildDependencyPath(predForecastRight, y1, succForecastLeft, y2));
     }
   }
@@ -493,10 +541,12 @@ function buildModel(schedule: ProjectSchedule): Model {
     colW,
     columns,
     gridWidth,
+    rows,
     bars,
     depLines,
     forecastDepLines,
     todayX: todayX >= 0 && todayX <= gridWidth ? todayX : null,
     deadlineX: deadlineX >= 0 && deadlineX <= gridWidth ? deadlineX : null,
+    totalHeight,
   };
 }
