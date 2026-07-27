@@ -113,6 +113,15 @@ export function Gantt({
               <span className="text-[13px] truncate flex-1" style={{ color: "var(--text-primary)" }}>
                 {t.name}
               </span>
+              {t.forecastEnd && (
+                <span
+                  className="text-[9px] mono whitespace-nowrap"
+                  style={{ color: "var(--gantt-forecast-border)" }}
+                  title={`Forecast finish at current pace: ${fmtDate(t.forecastEnd)}`}
+                >
+                  → {fmtDate(t.forecastEnd, false)}
+                </span>
+              )}
               {t.isUnassigned ? (
                 <span className="text-[10px] whitespace-nowrap" style={{ color: "var(--status-danger-text)" }}>
                   ⚠ Unassigned

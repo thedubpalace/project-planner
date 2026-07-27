@@ -129,6 +129,15 @@ export function PortfolioGantt({
                 <span className="text-[12px] truncate flex-1" style={{ color: "var(--text-primary)" }}>
                   {row.task!.name}
                 </span>
+                {row.task!.forecastEnd && (
+                  <span
+                    className="text-[9px] mono whitespace-nowrap shrink-0"
+                    style={{ color: "var(--gantt-forecast-border)" }}
+                    title={`Forecast finish at current pace: ${fmtDate(row.task!.forecastEnd)}`}
+                  >
+                    → {fmtDate(row.task!.forecastEnd, false)}
+                  </span>
+                )}
                 {row.task!.isUnassigned && (
                   <span className="text-[10px] shrink-0" style={{ color: "var(--status-danger-text)" }}>
                     ⚠
