@@ -74,6 +74,7 @@ export type PillVariant =
   | "over-deadline"
   | "unassigned"
   | "overallocated"
+  | "behind-pace"
   | "not-started"
   | "in-progress"
   | "done"
@@ -86,6 +87,7 @@ const PILL: Record<PillVariant, { label: string; dot: string; bg: string; text: 
   "over-deadline": { label: "Over deadline", dot: "●", bg: "--status-danger-bg", text: "--status-danger-text", border: "--status-danger-border" },
   unassigned: { label: "Unassigned", dot: "⚠", bg: "--status-danger-bg", text: "--status-danger-text", border: "--status-danger-border" },
   overallocated: { label: "Overallocated", dot: "●", bg: "--status-danger-bg", text: "--status-danger-text", border: "--status-danger-border" },
+  "behind-pace": { label: "Behind pace", dot: "●", bg: "--status-warning-bg", text: "--status-warning-text", border: "--status-warning-border" },
   "done-late": { label: "Done late", dot: "●", bg: "--status-danger-bg", text: "--status-danger-text", border: "--status-danger-border" },
   "not-started": { label: "Not started", dot: "○", bg: "--status-neutral-bg", text: "--status-neutral-text", border: "--status-neutral-border" },
   "in-progress": { label: "In progress", dot: "◐", bg: "--accent-dim", text: "--accent-text", border: "--accent-border" },
@@ -109,9 +111,15 @@ export function StatusPill({ variant, label }: { variant: PillVariant; label?: s
 }
 
 // Derive a task's pill variant from its scheduled state.
-export function taskPill(status: TaskStatus, unassigned: boolean, overDeadline: boolean): PillVariant {
+export function taskPill(
+  status: TaskStatus,
+  unassigned: boolean,
+  overDeadline: boolean,
+  behindPace = false,
+): PillVariant {
   if (overDeadline) return "over-deadline";
   if (unassigned && status !== "done") return "unassigned";
+  if (behindPace) return "behind-pace";
   if (status === "done") return "done";
   if (status === "in_progress") return "in-progress";
   return "not-started";

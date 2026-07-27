@@ -154,7 +154,7 @@ export function TaskTable({
                   </div>
                 </td>
                 <td className="px-3 py-2.5">
-                  <StatusPill variant={taskPill(t.status, t.isUnassigned, t.overDeadline)} />
+                  <StatusPill variant={taskPill(t.status, t.isUnassigned, t.overDeadline, t.behindPace)} />
                 </td>
                 <td className="px-3 py-2.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
                   {t.dependsOn.length

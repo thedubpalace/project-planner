@@ -92,11 +92,15 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
 
   const over = schedule.risk === "over_deadline";
   const affected = schedule.affectedTaskIds.length;
+  const behindTasks = schedule.tasks.filter((t) => t.behindPace);
 
   return (
     <div>
       {/* header */}
-      <div className="px-8 py-6" style={{ borderBottom: over ? "none" : "1px solid var(--border-divider)" }}>
+      <div
+        className="px-8 py-6"
+        style={{ borderBottom: over || behindTasks.length > 0 ? "none" : "1px solid var(--border-divider)" }}
+      >
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-[20px] font-semibold" style={{ color: "var(--text-primary)" }}>
             {project.name}
@@ -139,6 +143,36 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             onClick={() => setTab("timeline")}
           >
             View in Timeline →
+          </button>
+        </div>
+      )}
+
+      {/* behind-pace rollup — separate from the deadline banner: a task can be
+          running behind its own planned pace well before that pushes the
+          whole project past its deadline */}
+      {behindTasks.length > 0 && (
+        <div
+          className="fade-in flex items-center gap-3 px-8 py-3"
+          style={{ background: "var(--status-warning-bg)", borderBottom: "1px solid var(--status-warning-border)" }}
+        >
+          <span style={{ color: "var(--status-warning-text)" }}>⚠</span>
+          <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>
+            <strong style={{ color: "var(--status-warning-text)" }}>{behindTasks.length}</strong> task
+            {behindTasks.length === 1 ? " is" : "s are"} behind pace:{" "}
+            {behindTasks.map((t, i) => (
+              <span key={t.id}>
+                {i > 0 && ", "}
+                <strong style={{ color: "var(--status-warning-text)" }}>{t.name}</strong>
+              </span>
+            ))}
+            {" "}— less progress logged than the time already elapsed against plan.
+          </span>
+          <button
+            className="ml-auto text-[13px] cursor-pointer hover:underline"
+            style={{ color: "var(--status-warning-text)" }}
+            onClick={() => setTab("tasks")}
+          >
+            View in Tasks →
           </button>
         </div>
       )}

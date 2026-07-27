@@ -146,6 +146,14 @@ export function computeTaskSchedule(input: ScheduleInput): Map<number, Scheduled
     const effectiveEnd =
       t.status === "done" && t.actualEnd ? fromISO(t.actualEnd) : plannedEnd;
 
+    // Behind pace: more of the planned window has elapsed than the task's
+    // progress accounts for (e.g. 3 of 4 planned days gone but only 25%
+    // done). Not meaningful once done — a done task's schedule is fixed to
+    // its actual completion date, not this comparison.
+    const expectedPct =
+      asOf <= plannedStart ? 0 : asOf >= plannedEnd ? 100 : Math.min(100, Math.round((businessDaysInclusive(plannedStart, asOf) / dur) * 100));
+    const behindPace = t.status !== "done" && t.progress < expectedPct;
+
     result.set(t.id, {
       ...t,
       plannedStart: toISO(plannedStart),
@@ -155,6 +163,7 @@ export function computeTaskSchedule(input: ScheduleInput): Map<number, Scheduled
       isUnassigned: t.resourceId == null,
       overDeadline: false, // filled by computeProjectSchedule
       durationDays: dur,
+      behindPace,
     });
   }
   return result;
