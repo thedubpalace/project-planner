@@ -17,17 +17,18 @@ function d(iso: string): Date {
   return parseISO(iso + "T00:00:00");
 }
 
-type DragMode = "move" | "resize-start" | "resize-end";
+type DragMode = "move" | "resize-start" | "resize-end" | "actual-end";
 interface DragState {
   taskId: number;
   mode: DragMode;
   startClientX: number;
   deltaDays: number;
 }
+type Patch = { startDateOverride?: string; estimationHours?: number } | { actualEnd: string };
 interface PendingCommit {
   taskId: number;
   taskName: string;
-  patch: { startDateOverride?: string; estimationHours?: number };
+  patch: Patch;
 }
 
 export function Gantt({
@@ -75,9 +76,12 @@ export function Gantt({
   const capacityFor = (t: ScheduledTask): number =>
     resources.find((r) => r.id === t.resourceId)?.capacityHoursPerDay ?? DEFAULT_CAPACITY;
 
-  const applyPatch = async (taskId: number, patch: PendingCommit["patch"]) => {
+  const applyPatch = async (task: ScheduledTask, patch: Patch) => {
     try {
-      const res = await api.updateTask(taskId, patch);
+      const res =
+        "actualEnd" in patch
+          ? await api.updateProgress(task.id, task.progress, task.status, patch.actualEnd)
+          : await api.updateTask(task.id, patch);
       onSchedule(res.schedule);
       toast("Schedule updated", "success");
     } catch (e) {
@@ -85,11 +89,17 @@ export function Gantt({
     }
   };
 
-  const buildPatch = (task: ScheduledTask, mode: DragMode, deltaDays: number): PendingCommit["patch"] | null => {
+  const buildPatch = (task: ScheduledTask, mode: DragMode, deltaDays: number): Patch | null => {
     if (deltaDays === 0) return null;
     const capacity = capacityFor(task);
     const origStart = d(task.plannedStart);
     const origEnd = d(task.plannedEnd);
+    if (mode === "actual-end") {
+      const origActualEnd = task.actualEnd ? d(task.actualEnd) : origEnd;
+      const newActualEnd = addDays(origActualEnd, deltaDays);
+      if (newActualEnd < origStart) return null; // can't finish before it started
+      return { actualEnd: toISO(newActualEnd) };
+    }
     if (mode === "move") {
       return { startDateOverride: toISO(addDays(origStart, deltaDays)) };
     }
@@ -147,10 +157,14 @@ export function Gantt({
       if (!task) return;
       const patch = buildPatch(task, cur.mode, cur.deltaDays);
       if (!patch) return;
-      if (task.status === "done") {
+      // The done-task confirm gate is for retroactively editing the PLAN of a
+      // finished task (surprising); dragging the actual-completion handle is
+      // the direct, expected way to correct that date, same as the Tasks tab's
+      // date input for it — no extra gate needed there.
+      if (task.status === "done" && cur.mode !== "actual-end") {
         setPendingConfirm({ taskId: task.id, taskName: task.name, patch });
       } else {
-        applyPatch(task.id, patch);
+        applyPatch(task, patch);
       }
     };
     window.addEventListener("mousemove", onMove);
@@ -352,15 +366,19 @@ export function Gantt({
                 const dPx = isDragging ? drag!.deltaDays * pxPerDay : 0;
                 let ghostLeft = b.left;
                 let ghostWidth = b.plannedWidth;
+                let fgWidth = b.fg?.width ?? 0;
                 if (isDragging) {
                   if (drag!.mode === "move") ghostLeft += dPx;
                   else if (drag!.mode === "resize-start") {
                     ghostLeft += dPx;
                     ghostWidth = Math.max(6, ghostWidth - dPx);
-                  } else {
+                  } else if (drag!.mode === "resize-end") {
                     ghostWidth = Math.max(6, ghostWidth + dPx);
+                  } else if (drag!.mode === "actual-end") {
+                    fgWidth = Math.max(6, fgWidth + dPx);
                   }
                 }
+                const isDraggingActualEnd = isDragging && drag!.mode === "actual-end";
                 return (
                   <div key={t.id} className="absolute" style={{ top: b.top, height: ROW_H, left: 0, right: 0 }}>
                     {/* planned ghost — draggable to move/resize the plan */}
@@ -399,24 +417,42 @@ export function Gantt({
                         className={`absolute rounded flex items-center px-1.5 bar-shift ${pulseIds.has(t.id) ? "bar-pulse" : ""}`}
                         style={{
                           left: b.fg.left,
-                          width: b.fg.width,
+                          width: fgWidth,
                           top: (ROW_H - 20) / 2,
                           height: 20,
                           background: b.fg.color,
-                          outline: b.ring ? "2px solid var(--gantt-critical-ring)" : undefined,
-                          outlineOffset: b.ring ? 1 : undefined,
+                          outline: isDraggingActualEnd ? "2px solid var(--accent)" : b.ring ? "2px solid var(--gantt-critical-ring)" : undefined,
+                          outlineOffset: b.ring || isDraggingActualEnd ? 1 : undefined,
                           zIndex: 6,
                           pointerEvents: "none",
                         }}
                         title={b.aria}
                         aria-label={b.aria}
                       >
-                        {b.fg.width >= 60 && (
+                        {fgWidth >= 60 && (
                           <span className="mono text-[10px] truncate" style={{ color: "var(--text-on-accent)" }}>
                             {t.estimationHours}h
                           </span>
                         )}
                       </div>
+                    )}
+                    {/* actual-completion handle — done tasks only; drags actualEnd
+                        directly (the date that actually shifts dependents), not the plan */}
+                    {t.status === "done" && b.fg && (
+                      <div
+                        data-task-id={t.id}
+                        className="absolute"
+                        style={{
+                          left: b.fg.left + fgWidth - 5,
+                          width: 8,
+                          top: (ROW_H - 20) / 2,
+                          height: 20,
+                          cursor: "ew-resize",
+                          zIndex: 9,
+                        }}
+                        onMouseDown={(e) => beginDrag(e, "actual-end")}
+                        title="Drag to change the actual completion date"
+                      />
                     )}
                     {/* forecast — own delay (tail past the plan) and cascaded shift now
                         share one visual: light amber wash + dashed border. One pattern
@@ -489,7 +525,8 @@ export function Gantt({
                 variant="primary"
                 size="sm"
                 onClick={() => {
-                  applyPatch(pendingConfirm.taskId, pendingConfirm.patch);
+                  const task = tasks.find((t) => t.id === pendingConfirm.taskId);
+                  if (task) applyPatch(task, pendingConfirm.patch);
                   setPendingConfirm(null);
                 }}
               >
