@@ -113,10 +113,19 @@ export function Gantt({
     const state: DragState = { taskId, mode, startClientX: e.clientX, deltaDays: 0 };
     dragRef.current = state;
     setDrag(state);
+    // Force the cursor for the whole drag — otherwise it reflects whatever
+    // element the pointer happens to be over mid-drag instead of the
+    // move/resize affordance, and can look "stuck" once released.
+    document.body.style.cursor = mode === "move" ? "move" : "ew-resize";
+    document.body.style.userSelect = "none";
   };
 
   useEffect(() => {
     if (!drag) return;
+    const resetCursor = () => {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
     const onMove = (e: MouseEvent) => {
       const cur = dragRef.current;
       if (!cur) return;
@@ -132,6 +141,7 @@ export function Gantt({
       const cur = dragRef.current;
       dragRef.current = null;
       setDrag(null);
+      resetCursor();
       if (!cur) return;
       const task = tasks.find((t) => t.id === cur.taskId);
       if (!task) return;
@@ -148,6 +158,7 @@ export function Gantt({
     return () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      resetCursor();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drag != null, pxPerDay]);
