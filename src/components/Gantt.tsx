@@ -211,6 +211,7 @@ export function Gantt({
       </div>
 
       {/* desktop gantt */}
+      <Legend />
       <div className="hidden sm:flex" style={{ height: "calc(100vh - 260px)", minHeight: 360 }}>
         {/* left pane */}
         <div
@@ -417,7 +418,9 @@ export function Gantt({
                         )}
                       </div>
                     )}
-                    {/* forecast overrun (own delay) — hatched tail past the plan */}
+                    {/* forecast — own delay (tail past the plan) and cascaded shift now
+                        share one visual: light amber wash + dashed border. One pattern
+                        to learn instead of two (was hatch vs. outline). */}
                     {b.forecastOverrun && (
                       <div
                         className="absolute rounded"
@@ -426,17 +429,14 @@ export function Gantt({
                           width: b.forecastOverrun.width,
                           top: (ROW_H - 20) / 2,
                           height: 20,
-                          background: "var(--gantt-forecast-bg)",
-                          backgroundImage:
-                            "repeating-linear-gradient(45deg, var(--gantt-forecast-stripe) 0, var(--gantt-forecast-stripe) 1.5px, transparent 1.5px, transparent 9px)",
-                          border: "1px solid var(--gantt-forecast-border)",
+                          background: "var(--gantt-forecast-ghost-bg)",
+                          border: "1.5px dashed var(--gantt-forecast-border)",
                           zIndex: 4,
                           pointerEvents: "none",
                         }}
                         title={`Forecast: at current pace, finishes ${fmtDate(t.forecastEnd, false)}`}
                       />
                     )}
-                    {/* forecast shift (cascaded from a delayed predecessor) — preview ghost */}
                     {b.forecastGhost && (
                       <div
                         className="absolute rounded"
@@ -500,6 +500,48 @@ export function Gantt({
         </div>
       )}
     </>
+  );
+}
+
+function Swatch({ style }: { style: React.CSSProperties }) {
+  return <span className="inline-block shrink-0 rounded-[2px]" style={{ width: 14, height: 10, ...style }} />;
+}
+
+function Legend() {
+  return (
+    <div
+      className="hidden sm:flex items-center flex-wrap gap-x-4 gap-y-1 px-3 py-1.5 text-[10px]"
+      style={{ color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}
+    >
+      <span className="inline-flex items-center gap-1.5">
+        <Swatch style={{ border: "1px dashed var(--gantt-bar-planned-border)", background: "var(--gantt-bar-planned-bg)" }} />
+        Planned
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <Swatch style={{ background: "var(--accent)" }} />
+        In progress
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <Swatch style={{ background: "var(--gantt-bar-done-bg)" }} />
+        Done
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <Swatch style={{ background: "var(--gantt-bar-late-bg)" }} />
+        Over deadline
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <Swatch style={{ border: "1.5px dashed var(--gantt-forecast-border)", background: "var(--gantt-forecast-ghost-bg)" }} />
+        Forecast
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block" style={{ width: 2, height: 12, background: "var(--gantt-today-line)" }} />
+        Today
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-block" style={{ width: 0, height: 12, borderLeft: "2px dashed var(--gantt-deadline-line)" }} />
+        Deadline
+      </span>
+    </div>
   );
 }
 

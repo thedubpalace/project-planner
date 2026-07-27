@@ -277,7 +277,8 @@ export function PortfolioGantt({
                         aria-label={b.aria}
                       />
                     )}
-                    {/* forecast overrun (own delay) — hatched tail past the plan */}
+                    {/* forecast — own delay and cascaded shift share one visual now:
+                        light amber wash + dashed border (was hatch vs. outline). */}
                     {b.forecastOverrun && (
                       <div
                         className="absolute rounded"
@@ -286,16 +287,13 @@ export function PortfolioGantt({
                           width: b.forecastOverrun.width,
                           top: (ROW_H - 18) / 2,
                           height: 18,
-                          background: "var(--gantt-forecast-bg)",
-                          backgroundImage:
-                            "repeating-linear-gradient(45deg, var(--gantt-forecast-stripe) 0, var(--gantt-forecast-stripe) 1.5px, transparent 1.5px, transparent 9px)",
-                          border: "1px solid var(--gantt-forecast-border)",
+                          background: "var(--gantt-forecast-ghost-bg)",
+                          border: "1.5px dashed var(--gantt-forecast-border)",
                           zIndex: 4,
                         }}
                         title={`Forecast: at current pace, finishes ${fmtDate(t.forecastEnd, false)}`}
                       />
                     )}
-                    {/* forecast shift (cascaded from a delayed predecessor) — preview ghost */}
                     {b.forecastGhost && (
                       <div
                         className="absolute rounded"
