@@ -43,6 +43,8 @@ export interface ScheduledTask extends Task {
   overDeadline: boolean; // this task's finish pushes past / exceeds deadline
   durationDays: number; // business days
   behindPace: boolean; // elapsed share of the planned window exceeds progress %
+  forecastStart: string | null; // set when behind (own) or cascaded from a delayed predecessor
+  forecastEnd: string | null;
 }
 
 export type ProjectRisk = "on_track" | "at_risk" | "over_deadline";

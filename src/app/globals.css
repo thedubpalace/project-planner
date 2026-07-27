@@ -57,6 +57,8 @@
   --gantt-bar-late-bg: oklch(48% 0.17 25);
   --gantt-dependency-line: oklch(72% 0.012 60);
   --gantt-critical-ring: oklch(48% 0.17 25);
+  --gantt-forecast-bg: oklch(88% 0.1 85);
+  --gantt-forecast-border: oklch(55% 0.15 85);
 
   /* skill-tag palette */
   --tag-violet-text: oklch(42% 0.14 275); --tag-violet-bg: oklch(95% 0.03 275); --tag-violet-border: oklch(82% 0.07 275);

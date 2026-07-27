@@ -154,6 +154,21 @@ export function computeTaskSchedule(input: ScheduleInput): Map<number, Scheduled
       asOf <= plannedStart ? 0 : asOf >= plannedEnd ? 100 : Math.min(100, Math.round((businessDaysInclusive(plannedStart, asOf) / dur) * 100));
     const behindPace = t.status !== "done" && t.progress < expectedPct;
 
+    // Forecast: at the current rate, when would this task actually finish?
+    // Linear extrapolation from elapsed-days-vs-progress-so-far. A task with
+    // 0% logged yet has no rate to extrapolate — fall back to "as if it
+    // started today and took the full planned duration."
+    let forecastEnd: string | null = null;
+    if (behindPace) {
+      if (t.progress > 0) {
+        const elapsedDays = businessDaysInclusive(plannedStart, asOf);
+        const remainingDays = Math.max(1, Math.ceil((elapsedDays * (100 - t.progress)) / t.progress));
+        forecastEnd = toISO(addBusinessDays(asOf, remainingDays - 1));
+      } else {
+        forecastEnd = toISO(addBusinessDays(asOf, dur - 1));
+      }
+    }
+
     result.set(t.id, {
       ...t,
       plannedStart: toISO(plannedStart),
@@ -164,8 +179,38 @@ export function computeTaskSchedule(input: ScheduleInput): Map<number, Scheduled
       overDeadline: false, // filled by computeProjectSchedule
       durationDays: dur,
       behindPace,
+      forecastStart: behindPace ? toISO(plannedStart) : null,
+      forecastEnd,
     });
   }
+
+  // Cascade forecast delays through finish-to-start dependencies: a task
+  // with no overrun of its own still shifts if a predecessor is forecast to
+  // finish later than planned. Runs in the same topo order, so a
+  // predecessor's final forecast is settled before its successors read it.
+  for (const t of ordered) {
+    const st = result.get(t.id)!;
+    if (st.forecastEnd) continue; // already has its own overrun
+    let cascaded: Date | null = null;
+    for (const depId of t.dependsOn) {
+      const dep = result.get(depId);
+      if (!dep?.forecastEnd) continue;
+      const candidate = addBusinessDays(fromISO(dep.forecastEnd), 1);
+      if (!cascaded || candidate > cascaded) cascaded = candidate;
+    }
+    if (cascaded) {
+      const forecastStartDate = rollForward(cascaded);
+      if (forecastStartDate > fromISO(st.plannedStart)) {
+        const forecastEndDate = addBusinessDays(forecastStartDate, st.durationDays - 1);
+        result.set(t.id, {
+          ...st,
+          forecastStart: toISO(forecastStartDate),
+          forecastEnd: toISO(forecastEndDate),
+        });
+      }
+    }
+  }
+
   return result;
 }
 

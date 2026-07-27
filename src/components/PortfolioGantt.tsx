@@ -269,6 +269,39 @@ export function PortfolioGantt({
                         aria-label={b.aria}
                       />
                     )}
+                    {/* forecast overrun (own delay) — hatched tail past the plan */}
+                    {b.forecastOverrun && (
+                      <div
+                        className="absolute rounded"
+                        style={{
+                          left: b.forecastOverrun.left,
+                          width: b.forecastOverrun.width,
+                          top: (ROW_H - 18) / 2,
+                          height: 18,
+                          background: "var(--gantt-forecast-bg)",
+                          backgroundImage:
+                            "repeating-linear-gradient(45deg, var(--gantt-forecast-border) 0, var(--gantt-forecast-border) 2px, transparent 2px, transparent 6px)",
+                          border: "1px solid var(--gantt-forecast-border)",
+                          zIndex: 4,
+                        }}
+                        title={`Forecast: at current pace, finishes ${fmtDate(t.forecastEnd, false)}`}
+                      />
+                    )}
+                    {/* forecast shift (cascaded from a delayed predecessor) — preview ghost */}
+                    {b.forecastGhost && (
+                      <div
+                        className="absolute rounded"
+                        style={{
+                          left: b.forecastGhost.left,
+                          width: b.forecastGhost.width,
+                          top: (ROW_H - 18) / 2,
+                          height: 18,
+                          border: "1.5px dashed var(--gantt-forecast-border)",
+                          zIndex: 4,
+                        }}
+                        title={`Forecast shift: ${fmtDate(t.forecastStart, false)} – ${fmtDate(t.forecastEnd, false)}`}
+                      />
+                    )}
                     {!b.fg && <span className="sr-only">{b.aria}</span>}
                   </div>
                 );
@@ -373,6 +406,8 @@ interface Bar {
   fg: { left: number; width: number; color: string } | null;
   ring: boolean;
   aria: string;
+  forecastOverrun: { left: number; width: number } | null;
+  forecastGhost: { left: number; width: number } | null;
 }
 interface Row {
   kind: "group" | "task";
@@ -409,6 +444,7 @@ function buildModel(projects: DashboardProject[], collapsed: Set<number>): Model
     dates.push(d(p.deadline));
     for (const t of p.schedule.tasks) {
       dates.push(d(t.plannedStart), d(t.plannedEnd), d(t.effectiveEnd));
+      if (t.forecastEnd) dates.push(d(t.forecastEnd));
     }
   }
 
@@ -494,7 +530,19 @@ function buildModel(projects: DashboardProject[], collapsed: Set<number>): Model
       t.isUnassigned ? "unassigned" : "assigned to " + t.resourceName
     }, ${t.progress}% complete`;
 
-    bars.set(t.id, { top: row.top, left, plannedWidth, fg, ring: t.overDeadline, aria });
+    let forecastOverrun: Bar["forecastOverrun"] = null;
+    let forecastGhost: Bar["forecastGhost"] = null;
+    if (t.forecastEnd) {
+      const forecastRight = x(addDays(d(t.forecastEnd), 1));
+      if (t.forecastStart === t.plannedStart) {
+        forecastOverrun = { left: plannedRight, width: Math.max(4, forecastRight - plannedRight) };
+      } else {
+        const forecastLeft = x(d(t.forecastStart!));
+        forecastGhost = { left: forecastLeft, width: Math.max(6, forecastRight - forecastLeft) };
+      }
+    }
+
+    bars.set(t.id, { top: row.top, left, plannedWidth, fg, ring: t.overDeadline, aria, forecastOverrun, forecastGhost });
   }
 
   // dependency elbow lines (predecessor/successor always share a project)
