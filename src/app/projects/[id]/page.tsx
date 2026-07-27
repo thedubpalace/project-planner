@@ -196,7 +196,9 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
 
       {/* tab content */}
       <div className="fade-in" key={tab}>
-        {tab === "timeline" && <Gantt schedule={schedule} onEditTask={openEditTask} />}
+        {tab === "timeline" && (
+          <Gantt schedule={schedule} resources={resources} onEditTask={openEditTask} onSchedule={setSchedule} />
+        )}
         {tab === "tasks" && (
           <div className="px-8">
             <TaskTable schedule={schedule} onEdit={openEditTask} onSchedule={setSchedule} onAddTask={openNewTask} />

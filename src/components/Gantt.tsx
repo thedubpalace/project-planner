@@ -2,30 +2,54 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, differenceInCalendarDays, format, isWeekend, parseISO, startOfWeek } from "date-fns";
-import type { ProjectSchedule, ScheduledTask } from "@/lib/types";
+import { api } from "@/lib/client";
+import type { ProjectSchedule, ResourceLoad, ScheduledTask } from "@/lib/types";
+import { businessDaysInclusive, toISO } from "@/lib/schedule";
 import { buildDependencyPath } from "@/lib/ganttConnector";
 import { groupTasks } from "@/lib/taskGroup";
-import { StatusPill, fmtDate, taskPill } from "./ui";
+import { Button, StatusPill, fmtDate, taskPill, useToast } from "./ui";
 
 const ROW_H = 36;
 const HEADER_H = 24;
+const DEFAULT_CAPACITY = 8;
 
 function d(iso: string): Date {
   return parseISO(iso + "T00:00:00");
 }
 
+type DragMode = "move" | "resize-start" | "resize-end";
+interface DragState {
+  taskId: number;
+  mode: DragMode;
+  startClientX: number;
+  deltaDays: number;
+}
+interface PendingCommit {
+  taskId: number;
+  taskName: string;
+  patch: { startDateOverride?: string; estimationHours?: number };
+}
+
 export function Gantt({
   schedule,
+  resources,
   onEditTask,
+  onSchedule,
 }: {
   schedule: ProjectSchedule;
+  resources: ResourceLoad[];
   onEditTask: (t: ScheduledTask) => void;
+  onSchedule: (s: ProjectSchedule) => void;
 }) {
+  const toast = useToast();
   const tasks = schedule.tasks;
   const leftRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const [pulseIds, setPulseIds] = useState<Set<number>>(new Set());
   const prevPos = useRef<Map<number, string>>(new Map());
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingCommit | null>(null);
+  const dragRef = useRef<DragState | null>(null);
 
   // detect shifted bars → pulse
   useEffect(() => {
@@ -45,6 +69,88 @@ export function Gantt({
 
   const model = useMemo(() => buildModel(schedule), [schedule]);
   const mobileOrder = useMemo(() => groupTasks(tasks).map((g) => g.t), [tasks]);
+  const unitDays = model.unit === "week" ? 7 : 1;
+  const pxPerDay = model.colW / unitDays;
+
+  const capacityFor = (t: ScheduledTask): number =>
+    resources.find((r) => r.id === t.resourceId)?.capacityHoursPerDay ?? DEFAULT_CAPACITY;
+
+  const applyPatch = async (taskId: number, patch: PendingCommit["patch"]) => {
+    try {
+      const res = await api.updateTask(taskId, patch);
+      onSchedule(res.schedule);
+      toast("Schedule updated", "success");
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
+  };
+
+  const buildPatch = (task: ScheduledTask, mode: DragMode, deltaDays: number): PendingCommit["patch"] | null => {
+    if (deltaDays === 0) return null;
+    const capacity = capacityFor(task);
+    const origStart = d(task.plannedStart);
+    const origEnd = d(task.plannedEnd);
+    if (mode === "move") {
+      return { startDateOverride: toISO(addDays(origStart, deltaDays)) };
+    }
+    if (mode === "resize-start") {
+      const newStart = addDays(origStart, deltaDays);
+      if (newStart >= origEnd) return null; // can't drag start past the end
+      const dur = businessDaysInclusive(newStart, origEnd);
+      return { startDateOverride: toISO(newStart), estimationHours: dur * capacity };
+    }
+    // resize-end
+    const newEnd = addDays(origEnd, deltaDays);
+    if (newEnd < origStart) return null;
+    const dur = Math.max(1, businessDaysInclusive(origStart, newEnd));
+    return { estimationHours: dur * capacity };
+  };
+
+  const beginDrag = (e: React.MouseEvent<HTMLElement>, mode: DragMode) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const taskId = Number(e.currentTarget.dataset.taskId);
+    const state: DragState = { taskId, mode, startClientX: e.clientX, deltaDays: 0 };
+    dragRef.current = state;
+    setDrag(state);
+  };
+
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e: MouseEvent) => {
+      const cur = dragRef.current;
+      if (!cur) return;
+      const deltaPx = e.clientX - cur.startClientX;
+      const deltaDays = Math.round(deltaPx / pxPerDay);
+      if (deltaDays !== cur.deltaDays) {
+        const next = { ...cur, deltaDays };
+        dragRef.current = next;
+        setDrag(next);
+      }
+    };
+    const onUp = () => {
+      const cur = dragRef.current;
+      dragRef.current = null;
+      setDrag(null);
+      if (!cur) return;
+      const task = tasks.find((t) => t.id === cur.taskId);
+      if (!task) return;
+      const patch = buildPatch(task, cur.mode, cur.deltaDays);
+      if (!patch) return;
+      if (task.status === "done") {
+        setPendingConfirm({ taskId: task.id, taskName: task.name, patch });
+      } else {
+        applyPatch(task.id, patch);
+      }
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag != null, pxPerDay]);
 
   if (tasks.length === 0) {
     return (
@@ -230,19 +336,50 @@ export function Gantt({
                 if (row.kind !== "task") return null;
                 const t = row.task!;
                 const b = model.bars.get(t.id)!;
+                const isDragging = drag?.taskId === t.id;
+                const dPx = isDragging ? drag!.deltaDays * pxPerDay : 0;
+                let ghostLeft = b.left;
+                let ghostWidth = b.plannedWidth;
+                if (isDragging) {
+                  if (drag!.mode === "move") ghostLeft += dPx;
+                  else if (drag!.mode === "resize-start") {
+                    ghostLeft += dPx;
+                    ghostWidth = Math.max(6, ghostWidth - dPx);
+                  } else {
+                    ghostWidth = Math.max(6, ghostWidth + dPx);
+                  }
+                }
                 return (
                   <div key={t.id} className="absolute" style={{ top: b.top, height: ROW_H, left: 0, right: 0 }}>
-                    {/* planned ghost */}
+                    {/* planned ghost — draggable to move/resize the plan */}
                     <div
+                      data-task-id={t.id}
                       className="absolute rounded"
                       style={{
-                        left: b.left,
-                        width: b.plannedWidth,
+                        left: ghostLeft,
+                        width: ghostWidth,
                         top: (ROW_H - 20) / 2,
                         height: 20,
                         background: "var(--gantt-bar-planned-bg)",
-                        border: "1px dashed var(--gantt-bar-planned-border)",
+                        border: `1px dashed ${isDragging ? "var(--accent)" : "var(--gantt-bar-planned-border)"}`,
+                        cursor: "move",
+                        zIndex: isDragging ? 8 : 1,
                       }}
+                      onMouseDown={(e) => beginDrag(e, "move")}
+                      title="Drag to move — drag the edges to resize"
+                    />
+                    {/* resize handles */}
+                    <div
+                      data-task-id={t.id}
+                      className="absolute"
+                      style={{ left: ghostLeft - 3, width: 8, top: (ROW_H - 20) / 2, height: 20, cursor: "ew-resize", zIndex: 9 }}
+                      onMouseDown={(e) => beginDrag(e, "resize-start")}
+                    />
+                    <div
+                      data-task-id={t.id}
+                      className="absolute"
+                      style={{ left: ghostLeft + ghostWidth - 5, width: 8, top: (ROW_H - 20) / 2, height: 20, cursor: "ew-resize", zIndex: 9 }}
+                      onMouseDown={(e) => beginDrag(e, "resize-end")}
                     />
                     {/* foreground */}
                     {b.fg && (
@@ -257,6 +394,7 @@ export function Gantt({
                           outline: b.ring ? "2px solid var(--gantt-critical-ring)" : undefined,
                           outlineOffset: b.ring ? 1 : undefined,
                           zIndex: 6,
+                          pointerEvents: "none",
                         }}
                         title={b.aria}
                         aria-label={b.aria}
@@ -282,6 +420,7 @@ export function Gantt({
                             "repeating-linear-gradient(45deg, var(--gantt-forecast-border) 0, var(--gantt-forecast-border) 2px, transparent 2px, transparent 6px)",
                           border: "1px solid var(--gantt-forecast-border)",
                           zIndex: 4,
+                          pointerEvents: "none",
                         }}
                         title={`Forecast: at current pace, finishes ${fmtDate(t.forecastEnd, false)}`}
                       />
@@ -297,6 +436,7 @@ export function Gantt({
                           height: 20,
                           border: "1.5px dashed var(--gantt-forecast-border)",
                           zIndex: 4,
+                          pointerEvents: "none",
                         }}
                         title={`Forecast shift: ${fmtDate(t.forecastStart, false)} – ${fmtDate(t.forecastEnd, false)}`}
                       />
@@ -310,6 +450,43 @@ export function Gantt({
           </div>
         </div>
       </div>
+
+      {/* confirm dialog — dragging a task that's already marked done */}
+      {pendingConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: "oklch(0% 0 0 / 55%)" }}
+          onClick={() => setPendingConfirm(null)}
+        >
+          <div
+            className="scale-in rounded-[10px] border p-5 max-w-[420px]"
+            style={{ background: "var(--bg-modal)", borderColor: "var(--status-danger-border)", boxShadow: "var(--shadow-modal)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-[14px] mb-2" style={{ color: "var(--text-primary)" }}>
+              &quot;{pendingConfirm.taskName}&quot; is already marked done.
+            </div>
+            <div className="text-[12px] mb-4" style={{ color: "var(--text-muted)" }}>
+              Adjust its planned dates anyway? This only changes the plan — it won&apos;t reopen the task or affect its actual completion date.
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="secondary" size="sm" onClick={() => setPendingConfirm(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  applyPatch(pendingConfirm.taskId, pendingConfirm.patch);
+                  setPendingConfirm(null);
+                }}
+              >
+                Adjust anyway
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
