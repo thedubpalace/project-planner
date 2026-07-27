@@ -70,6 +70,7 @@ export function TaskDrawer({
   const effectiveResource = resources.find((r) => r.id === effectiveId) ?? null;
 
   const otherTasks = tasks.filter((t) => t.id !== existing?.id);
+  const isDone = existing?.status === "done";
 
   const save = async () => {
     const est = Number(estimation);
@@ -153,12 +154,21 @@ export function TaskDrawer({
         <Field label="Depends on" hint="Finish-to-start: this task starts after the selected tasks finish.">
           <DepSelect tasks={otherTasks.map((t) => ({ id: t.id, name: t.name }))} value={deps} onChange={setDeps} />
         </Field>
-        <Field label="Start date">
+        <Field
+          label="Start date"
+          hint={
+            isDone
+              ? "Task is done — its schedule (and anything depending on it) is fixed to the actual completion date it was marked done on, not this planned start."
+              : undefined
+          }
+        >
           <input
             type="date"
             value={startOverride}
             onChange={(e) => setStartOverride(e.target.value)}
             placeholder="Auto (from dependency or today)"
+            disabled={isDone}
+            className={isDone ? "opacity-50 cursor-not-allowed" : undefined}
           />
         </Field>
 
