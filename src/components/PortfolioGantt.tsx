@@ -5,6 +5,7 @@ import { addDays, differenceInCalendarDays, format, isWeekend, parseISO, startOf
 import type { DashboardProject } from "@/lib/client";
 import type { ScheduledTask } from "@/lib/types";
 import { buildDependencyPath } from "@/lib/ganttConnector";
+import { groupTasks } from "@/lib/taskGroup";
 import { StatusPill, fmtDate, taskPill, type PillVariant } from "./ui";
 
 const ROW_H = 32;
@@ -503,7 +504,10 @@ function buildModel(projects: DashboardProject[], collapsed: Set<number>): Model
     rows.push({ kind: "group", top: y, height: HEADER_H, project: p });
     y += HEADER_H;
     if (!collapsed.has(p.id)) {
-      for (const t of p.schedule.tasks) {
+      // same "Process [Role]" clustering as Gantt.tsx/TaskTable, but no
+      // header row here — project is already the group; this just orders
+      // same-process tasks adjacently within it.
+      for (const { t } of groupTasks(p.schedule.tasks)) {
         rows.push({ kind: "task", top: y, height: ROW_H, project: p, task: t });
         y += ROW_H;
       }
