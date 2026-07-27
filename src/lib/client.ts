@@ -96,10 +96,10 @@ export const api = {
       `/api/tasks/${id}${force ? "?force=1" : ""}`,
       { method: "DELETE" },
     ),
-  updateProgress: (id: number, progress: number, status?: TaskStatus) =>
+  updateProgress: (id: number, progress: number, status?: TaskStatus, actualEnd?: string) =>
     req<ProgressResult>(`/api/tasks/${id}/progress`, {
       method: "POST",
-      body: JSON.stringify({ progress, status }),
+      body: JSON.stringify({ progress, status, actualEnd }),
     }),
 };
 

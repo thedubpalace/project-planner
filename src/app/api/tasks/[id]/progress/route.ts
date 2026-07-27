@@ -30,9 +30,14 @@ export async function POST(req: Request, { params }: Ctx) {
       ? (body.status as TaskStatus)
       : deriveStatus(progress);
 
-  // actualEnd = the real completion date (today) when a task is marked done; cleared
-  // otherwise. This is what shifts finish-to-start dependents (requirement 9).
-  const actualEnd = status === "done" ? existing.actualEnd ?? todayISO() : null;
+  // actualEnd = the real completion date; defaults to today the first time a
+  // task is marked done, then stays fixed — except an explicit override lets
+  // the PM correct it (e.g. "actually finished last Tuesday, not today").
+  // Cleared whenever status isn't done. This is what shifts finish-to-start
+  // dependents (requirement 9).
+  const actualEndOverride =
+    typeof body?.actualEnd === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.actualEnd) ? body.actualEnd : null;
+  const actualEnd = status === "done" ? actualEndOverride ?? existing.actualEnd ?? todayISO() : null;
 
   // capture schedule before the change to compute the shift delta for the toast
   const before = projectSchedule(existing.projectId);

@@ -56,6 +56,21 @@ export function TaskTable({
     }
   };
 
+  const setActualEnd = async (t: ScheduledTask, actualEnd: string) => {
+    try {
+      const res = await api.updateProgress(t.id, t.progress, t.status, actualEnd);
+      onSchedule(res.schedule);
+      toast(
+        res.shifted.length > 0
+          ? `Completion date updated — ${res.shifted.length} task${res.shifted.length > 1 ? "s" : ""} shifted`
+          : "Completion date updated",
+        "success",
+      );
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
+  };
+
   const del = async (t: ScheduledTask, force = false) => {
     try {
       const res = await api.deleteTask(t.id, force);
@@ -172,7 +187,19 @@ export function TaskTable({
                   </div>
                 </td>
                 <td className="px-3 py-2.5">
-                  <StatusPill variant={taskPill(t.status, t.isUnassigned, t.overDeadline, t.behindPace)} />
+                  <div className="flex flex-col items-start gap-1">
+                    <StatusPill variant={taskPill(t.status, t.isUnassigned, t.overDeadline, t.behindPace)} />
+                    {t.status === "done" && (
+                      <input
+                        type="date"
+                        value={t.actualEnd ?? ""}
+                        onChange={(e) => e.target.value && setActualEnd(t, e.target.value)}
+                        className="!w-auto"
+                        style={{ height: 20, padding: "0 4px", fontSize: 10 }}
+                        title="Actual completion date — editable, since this is what shifts dependent tasks"
+                      />
+                    )}
+                  </div>
                 </td>
                 <td className="px-3 py-2.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
                   {t.dependsOn.length
