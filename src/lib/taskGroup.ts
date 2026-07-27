@@ -17,17 +17,18 @@ export interface GroupedTask<T> {
   suffix: string | null;
 }
 
-export function groupTasks<T extends { id: number; name: string; plannedStart: string }>(
-  tasks: T[],
-): GroupedTask<T>[] {
+// Groups order by their earliest task id — i.e. creation/import order, which
+// for an import is the original source order (e.g. spreadsheet row order).
+// Deliberately not by computed planned date: that reshuffles rows every time
+// the schedule recalculates, which is more disorienting than useful here.
+export function groupTasks<T extends { id: number; name: string }>(tasks: T[]): GroupedTask<T>[] {
   const withKeys = tasks.map((t) => ({ t, ...taskGroupKey(t.name) }));
-  const groupStart = new Map<string, number>();
+  const groupOrder = new Map<string, number>();
   for (const { t, base } of withKeys) {
-    const ts = new Date(t.plannedStart).getTime();
-    if (!groupStart.has(base) || ts < groupStart.get(base)!) groupStart.set(base, ts);
+    if (!groupOrder.has(base) || t.id < groupOrder.get(base)!) groupOrder.set(base, t.id);
   }
   return withKeys.sort((a, b) => {
-    const byGroup = groupStart.get(a.base)! - groupStart.get(b.base)!;
+    const byGroup = groupOrder.get(a.base)! - groupOrder.get(b.base)!;
     if (byGroup !== 0) return byGroup;
     if (a.base !== b.base) return a.base.localeCompare(b.base);
     const ra = a.suffix ? TASK_ROLE_ORDER[a.suffix] ?? 99 : 99;
