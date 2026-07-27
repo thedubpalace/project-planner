@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import type { ProjectSchedule, ScheduledTask } from "@/lib/types";
 import {
   Button,
-  ProgressBar,
   SkillChip,
   StatusPill,
   taskPill,
@@ -148,8 +147,8 @@ export function TaskTable({
                   )}
                 </td>
                 <td className="px-3 py-2.5">
-                  <div className="flex flex-col gap-1">
-                    <ProgressBar pct={t.progress} width={90} />
+                  <div className="flex flex-col items-start gap-1">
+                    <ProgressSlider value={t.progress} onCommit={(p) => setProgress(t, p)} width={90} />
                     <Segmented value={t.progress} onChange={(p) => setProgress(t, p)} />
                   </div>
                 </td>
@@ -239,19 +238,58 @@ function Toolbar({
   );
 }
 
+// Draggable 1% slider — replaces the old static ProgressBar. Live value
+// updates on every drag tick for instant visual feedback; the API call
+// (onCommit) only fires on release, so dragging doesn't spam PATCH requests.
+function ProgressSlider({ value, onCommit, width = 90 }: { value: number; onCommit: (p: number) => void; width?: number }) {
+  const [live, setLive] = useState(value);
+  useEffect(() => setLive(value), [value]);
+
+  const commit = (e: React.SyntheticEvent<HTMLInputElement>) => onCommit(Number(e.currentTarget.value));
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={live}
+        onChange={(e) => setLive(Number(e.target.value))}
+        onMouseUp={commit}
+        onTouchEnd={commit}
+        onKeyUp={commit}
+        className="progress-slider"
+        style={{
+          width,
+          background: `linear-gradient(to right, var(--accent) ${live}%, var(--bg-surface-hi) ${live}%)`,
+        }}
+        aria-label="Progress"
+      />
+      <span className="text-[11px] mono shrink-0" style={{ color: "var(--text-secondary)", minWidth: 26 }}>
+        {live}%
+      </span>
+    </div>
+  );
+}
+
 function Segmented({ value, onChange }: { value: number; onChange: (p: number) => void }) {
   return (
     <div className="inline-flex rounded overflow-hidden border" style={{ borderColor: "var(--border-default)" }}>
-      {STEPS.map((s) => {
-        const active = value === s;
+      {STEPS.map((s, i) => {
+        // Each box only darkens across its own segment (previous step, this
+        // step] — box 75 goes from empty at 50% to full at 75%, and box 100
+        // stays untouched until value passes 75. Box 0 is trivially full.
+        const prev = STEPS[i - 1] ?? 0;
+        const intensity = s === 0 ? 1 : Math.max(0, Math.min(1, (value - prev) / (s - prev)));
         return (
           <button
             key={s}
             onClick={() => onChange(s)}
-            className="text-[10px] px-1.5 h-5 cursor-pointer transition-colors"
+            className="text-[10px] w-6 min-w-0 h-5 flex items-center justify-center cursor-pointer transition-colors"
             style={{
-              background: active ? "var(--accent)" : "transparent",
-              color: active ? "var(--text-on-accent)" : "var(--text-muted)",
+              background: `color-mix(in oklch, var(--accent) ${Math.round(intensity * 100)}%, transparent)`,
+              color: intensity >= 0.5 ? "var(--text-on-accent)" : "var(--text-muted)",
               borderLeft: s !== 0 ? "1px solid var(--border-default)" : "none",
             }}
           >
