@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/client";
 import type { ProjectSchedule, ScheduledTask } from "@/lib/types";
 import {
@@ -12,6 +12,16 @@ import {
 } from "./ui";
 
 const STEPS = [0, 25, 50, 75, 100];
+
+// Tasks named "Process name [Role]" (e.g. a BA/Dev/QA split of one row from
+// an import) are clustered together under a shared group header instead of
+// scattering across the table by planned date. Plain task names (no bracket
+// suffix) are untouched — they render exactly as before, no header row.
+const ROLE_ORDER: Record<string, number> = { BA: 0, Dev: 1, QA: 2 };
+function taskGroupKey(name: string): { base: string; suffix: string | null } {
+  const m = name.match(/^(.*) \[([^[\]]+)\]$/);
+  return m ? { base: m[1], suffix: m[2] } : { base: name, suffix: null };
+}
 
 export function TaskTable({
   schedule,
@@ -31,6 +41,25 @@ export function TaskTable({
   const tasks = schedule.tasks;
   const allSkills = [...new Set(tasks.flatMap((t) => t.skills))];
   const shown = filter ? tasks.filter((t) => t.skills.includes(filter)) : tasks;
+
+  // Cluster same-group tasks together; groups themselves stay in roughly
+  // chronological order (by their earliest planned start).
+  const grouped = useMemo(() => {
+    const withKeys = shown.map((t) => ({ t, ...taskGroupKey(t.name) }));
+    const groupStart = new Map<string, number>();
+    for (const { t, base } of withKeys) {
+      const ts = new Date(t.plannedStart).getTime();
+      if (!groupStart.has(base) || ts < groupStart.get(base)!) groupStart.set(base, ts);
+    }
+    return withKeys.sort((a, b) => {
+      const byGroup = groupStart.get(a.base)! - groupStart.get(b.base)!;
+      if (byGroup !== 0) return byGroup;
+      if (a.base !== b.base) return a.base.localeCompare(b.base);
+      const ra = a.suffix ? ROLE_ORDER[a.suffix] ?? 99 : 99;
+      const rb = b.suffix ? ROLE_ORDER[b.suffix] ?? 99 : 99;
+      return ra !== rb ? ra - rb : a.t.id - b.t.id;
+    });
+  }, [shown]);
 
   const setProgress = async (t: ScheduledTask, pct: number) => {
     try {
@@ -105,12 +134,26 @@ export function TaskTable({
             </tr>
           </thead>
           <tbody>
-            {shown.map((t) => (
-              <tr
-                key={t.id}
-                className="border-t group hover:bg-[var(--bg-surface-hi)]"
-                style={{ borderColor: "var(--border-divider)" }}
-              >
+            {grouped.map(({ t, base, suffix }, idx) => {
+              const prev = grouped[idx - 1];
+              const isNewGroup = !!suffix && (idx === 0 || prev.base !== base || !prev.suffix);
+              return (
+                <Fragment key={t.id}>
+                  {isNewGroup && (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.04em]"
+                        style={{ color: "var(--text-muted)", background: "var(--bg-surface-hi)" }}
+                      >
+                        {base}
+                      </td>
+                    </tr>
+                  )}
+                  <tr
+                    className="border-t group hover:bg-[var(--bg-surface-hi)]"
+                    style={{ borderColor: "var(--border-divider)" }}
+                  >
                 <td
                   className="px-3 py-2.5 text-[13px] cursor-pointer"
                   style={{ color: "var(--text-primary)" }}
@@ -171,8 +214,10 @@ export function TaskTable({
                     <span style={{ color: "var(--status-danger-text)" }}>Delete</span>
                   </Button>
                 </td>
-              </tr>
-            ))}
+                  </tr>
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
