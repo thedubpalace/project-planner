@@ -366,7 +366,6 @@ export function Gantt({
                 const dPx = isDragging ? drag!.deltaDays * pxPerDay : 0;
                 let ghostLeft = b.left;
                 let ghostWidth = b.plannedWidth;
-                let fgWidth = b.fg?.width ?? 0;
                 if (isDragging) {
                   if (drag!.mode === "move") ghostLeft += dPx;
                   else if (drag!.mode === "resize-start") {
@@ -374,11 +373,23 @@ export function Gantt({
                     ghostWidth = Math.max(6, ghostWidth - dPx);
                   } else if (drag!.mode === "resize-end") {
                     ghostWidth = Math.max(6, ghostWidth + dPx);
-                  } else if (drag!.mode === "actual-end") {
-                    fgWidth = Math.max(6, fgWidth + dPx);
                   }
                 }
                 const isDraggingActualEnd = isDragging && drag!.mode === "actual-end";
+                // While dragging the actual-completion handle, re-split live at the
+                // plan boundary: shrinks the green (on-plan) segment if dragged
+                // earlier than plannedEnd, grows the red overrun if dragged later.
+                const planRight = b.left + b.plannedWidth;
+                let fgWidth = b.fg?.width ?? 0;
+                let overrunLeft = b.overrun?.left ?? planRight;
+                let overrunWidth = b.overrun?.width ?? 0;
+                if (isDraggingActualEnd && b.fg) {
+                  const priorRight = b.fg.left + b.fg.width + overrunWidth;
+                  const previewRight = priorRight + dPx;
+                  fgWidth = Math.max(6, Math.min(previewRight, planRight) - b.fg.left);
+                  overrunLeft = planRight;
+                  overrunWidth = Math.max(0, previewRight - planRight);
+                }
                 return (
                   <div key={t.id} className="absolute" style={{ top: b.top, height: ROW_H, left: 0, right: 0 }}>
                     {/* planned ghost — draggable to move/resize the plan */}
@@ -436,6 +447,25 @@ export function Gantt({
                         )}
                       </div>
                     )}
+                    {/* overrun — the portion of a done task that ran past its own
+                        original plannedEnd, split out in the late color instead of
+                        tinting the whole bar red on any lateness */}
+                    {overrunWidth > 0 && (
+                      <div
+                        className="absolute rounded"
+                        style={{
+                          left: overrunLeft,
+                          width: overrunWidth,
+                          top: (ROW_H - 20) / 2,
+                          height: 20,
+                          background: "var(--gantt-bar-late-bg)",
+                          outline: isDraggingActualEnd ? "2px solid var(--accent)" : undefined,
+                          outlineOffset: isDraggingActualEnd ? 1 : undefined,
+                          zIndex: 6,
+                          pointerEvents: "none",
+                        }}
+                      />
+                    )}
                     {/* actual-completion handle — done tasks only; drags actualEnd
                         directly (the date that actually shifts dependents), not the plan */}
                     {t.status === "done" && b.fg && (
@@ -443,7 +473,7 @@ export function Gantt({
                         data-task-id={t.id}
                         className="absolute"
                         style={{
-                          left: b.fg.left + fgWidth - 5,
+                          left: b.fg.left + fgWidth + overrunWidth - 5,
                           width: 8,
                           top: (ROW_H - 20) / 2,
                           height: 20,
@@ -621,6 +651,7 @@ interface Bar {
   left: number;
   plannedWidth: number;
   fg: { left: number; width: number; color: string } | null;
+  overrun: { left: number; width: number } | null; // done tasks only: ran past the original plannedEnd
   ring: boolean;
   aria: string;
   forecastOverrun: { left: number; width: number } | null; // hatched tail past the plan, own delay
@@ -718,14 +749,21 @@ function buildModel(schedule: ProjectSchedule): Model {
     const plannedWidth = Math.max(6, plannedRight - left);
 
     let fg: Bar["fg"] = null;
-    const lateDone = t.status === "done" && t.actualEnd && d(t.actualEnd) > d(t.plannedEnd);
+    let overrun: Bar["overrun"] = null;
     if (t.status === "done") {
+      // Split the done bar at the task's own plannedEnd instead of coloring
+      // the whole thing red on any lateness: green up to the original plan,
+      // red only for the portion that actually ran past it.
       const actualRight = x(addDays(d(t.effectiveEnd), 1));
+      const onPlanRight = Math.min(actualRight, plannedRight);
       fg = {
         left,
-        width: Math.max(6, actualRight - left),
-        color: lateDone || t.overDeadline ? "var(--gantt-bar-late-bg)" : "var(--gantt-bar-done-bg)",
+        width: Math.max(6, onPlanRight - left),
+        color: "var(--gantt-bar-done-bg)",
       };
+      if (actualRight > plannedRight) {
+        overrun = { left: plannedRight, width: Math.max(4, actualRight - plannedRight) };
+      }
     } else if (t.status === "in_progress") {
       fg = {
         left,
@@ -754,7 +792,7 @@ function buildModel(schedule: ProjectSchedule): Model {
       }
     }
 
-    bars.set(t.id, { top: row.top, left, plannedWidth, fg, ring: t.overDeadline, aria, forecastOverrun, forecastGhost });
+    bars.set(t.id, { top: row.top, left, plannedWidth, fg, overrun, ring: t.overDeadline, aria, forecastOverrun, forecastGhost });
   }
 
   // dependency elbow lines

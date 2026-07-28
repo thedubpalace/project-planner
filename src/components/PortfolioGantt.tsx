@@ -277,6 +277,20 @@ export function PortfolioGantt({
                         aria-label={b.aria}
                       />
                     )}
+                    {/* overrun — portion of a done task past its own plannedEnd */}
+                    {b.overrun && (
+                      <div
+                        className="absolute rounded"
+                        style={{
+                          left: b.overrun.left,
+                          width: b.overrun.width,
+                          top: (ROW_H - 18) / 2,
+                          height: 18,
+                          background: "var(--gantt-bar-late-bg)",
+                          zIndex: 6,
+                        }}
+                      />
+                    )}
                     {/* forecast — own delay and cascaded shift share one visual now:
                         light amber wash + dashed border (was hatch vs. outline). */}
                     {b.forecastOverrun && (
@@ -411,6 +425,7 @@ interface Bar {
   left: number;
   plannedWidth: number;
   fg: { left: number; width: number; color: string } | null;
+  overrun: { left: number; width: number } | null;
   ring: boolean;
   aria: string;
   forecastOverrun: { left: number; width: number } | null;
@@ -512,14 +527,18 @@ function buildModel(projects: DashboardProject[], collapsed: Set<number>): Model
     const plannedWidth = Math.max(6, plannedRight - left);
 
     let fg: Bar["fg"] = null;
-    const lateDone = t.status === "done" && t.actualEnd && d(t.actualEnd) > d(t.plannedEnd);
+    let overrun: Bar["overrun"] = null;
     if (t.status === "done") {
       const actualRight = x(addDays(d(t.effectiveEnd), 1));
+      const onPlanRight = Math.min(actualRight, plannedRight);
       fg = {
         left,
-        width: Math.max(6, actualRight - left),
-        color: lateDone || t.overDeadline ? "var(--gantt-bar-late-bg)" : "var(--gantt-bar-done-bg)",
+        width: Math.max(6, onPlanRight - left),
+        color: "var(--gantt-bar-done-bg)",
       };
+      if (actualRight > plannedRight) {
+        overrun = { left: plannedRight, width: Math.max(4, actualRight - plannedRight) };
+      }
     } else if (t.status === "in_progress") {
       fg = {
         left,
@@ -546,7 +565,7 @@ function buildModel(projects: DashboardProject[], collapsed: Set<number>): Model
       }
     }
 
-    bars.set(t.id, { top: row.top, left, plannedWidth, fg, ring: t.overDeadline, aria, forecastOverrun, forecastGhost });
+    bars.set(t.id, { top: row.top, left, plannedWidth, fg, overrun, ring: t.overDeadline, aria, forecastOverrun, forecastGhost });
   }
 
   // dependency elbow lines (predecessor/successor always share a project)
