@@ -29,6 +29,7 @@ export interface Task {
   progress: number; // 0..100
   status: TaskStatus;
   actualEnd: string | null; // ISO date set when marked done
+  sortOrder: number; // manual display order (drag-to-reorder in Task Table)
   dependsOn: number[]; // predecessor task ids (finish-to-start)
   createdAt: string;
 }

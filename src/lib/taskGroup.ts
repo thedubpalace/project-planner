@@ -17,15 +17,20 @@ export interface GroupedTask<T> {
   suffix: string | null;
 }
 
-// Groups order by their earliest task id — i.e. creation/import order, which
-// for an import is the original source order (e.g. spreadsheet row order).
+// Groups order by their lowest sortOrder (falls back to id for tasks from
+// before sortOrder existed) — this is the manual drag-to-reorder position set
+// in the Task Table, so both Task Table and Timeline stay consistent.
 // Deliberately not by computed planned date: that reshuffles rows every time
 // the schedule recalculates, which is more disorienting than useful here.
-export function groupTasks<T extends { id: number; name: string }>(tasks: T[]): GroupedTask<T>[] {
+export function groupTasks<T extends { id: number; name: string; sortOrder?: number }>(
+  tasks: T[],
+): GroupedTask<T>[] {
+  const orderOf = (t: T) => t.sortOrder ?? t.id;
   const withKeys = tasks.map((t) => ({ t, ...taskGroupKey(t.name) }));
   const groupOrder = new Map<string, number>();
   for (const { t, base } of withKeys) {
-    if (!groupOrder.has(base) || t.id < groupOrder.get(base)!) groupOrder.set(base, t.id);
+    const o = orderOf(t);
+    if (!groupOrder.has(base) || o < groupOrder.get(base)!) groupOrder.set(base, o);
   }
   return withKeys.sort((a, b) => {
     const byGroup = groupOrder.get(a.base)! - groupOrder.get(b.base)!;
@@ -33,6 +38,6 @@ export function groupTasks<T extends { id: number; name: string }>(tasks: T[]): 
     if (a.base !== b.base) return a.base.localeCompare(b.base);
     const ra = a.suffix ? TASK_ROLE_ORDER[a.suffix] ?? 99 : 99;
     const rb = b.suffix ? TASK_ROLE_ORDER[b.suffix] ?? 99 : 99;
-    return ra !== rb ? ra - rb : a.t.id - b.t.id;
+    return ra !== rb ? ra - rb : orderOf(a.t) - orderOf(b.t);
   });
 }

@@ -101,6 +101,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ progress, status, actualEnd }),
     }),
+  reorderTask: (id: number, sortOrder: number) =>
+    req<{ task: Task; schedule: ProjectSchedule }>(`/api/tasks/${id}/reorder`, {
+      method: "POST",
+      body: JSON.stringify({ sortOrder }),
+    }),
 };
 
 export interface TaskCreateInput {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { addDays, differenceInCalendarDays, format, isWeekend, parseISO, startOfWeek } from "date-fns";
 import { api } from "@/lib/client";
 import type { ProjectSchedule, ResourceLoad, ScheduledTask } from "@/lib/types";
@@ -69,7 +69,7 @@ export function Gantt({
   }, [tasks]);
 
   const model = useMemo(() => buildModel(schedule), [schedule]);
-  const mobileOrder = useMemo(() => groupTasks(tasks).map((g) => g.t), [tasks]);
+  const mobileOrder = useMemo(() => groupTasks(tasks), [tasks]);
   const unitDays = model.unit === "week" ? 7 : 1;
   const pxPerDay = model.colW / unitDays;
 
@@ -203,25 +203,35 @@ export function Gantt({
         <div className="text-[12px] mb-1" style={{ color: "var(--text-muted)" }}>
           View full timeline on a larger screen
         </div>
-        {mobileOrder.map((t) => (
-          <div
-            key={t.id}
-            className="flex items-center justify-between rounded-md border px-3 py-2"
-            style={{ borderColor: "var(--border-divider)", background: "var(--bg-surface)" }}
-            onClick={() => onEditTask(t)}
-          >
-            <div className="flex flex-col">
-              <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>
-                {t.name}
-              </span>
-              <span className="text-[11px] mono" style={{ color: "var(--text-muted)" }}>
-                {fmtDate(t.plannedStart, false)} – {fmtDate(t.effectiveEnd, false)} ·{" "}
-                {t.isUnassigned ? "Unassigned" : t.resourceName}
-              </span>
-            </div>
-            <StatusPill variant={taskPill(t.status, t.isUnassigned, t.overDeadline)} />
-          </div>
-        ))}
+        {mobileOrder.map(({ t, base, suffix }, idx) => {
+          const prev = mobileOrder[idx - 1];
+          const isNewGroup = !!suffix && (idx === 0 || prev.base !== base || !prev.suffix);
+          return (
+            <Fragment key={t.id}>
+              {isNewGroup && (
+                <div className="text-[10px] font-semibold uppercase tracking-[0.04em] px-1 pt-2" style={{ color: "var(--text-muted)" }}>
+                  {base}
+                </div>
+              )}
+              <div
+                className="flex items-center justify-between rounded-md border px-3 py-2"
+                style={{ borderColor: "var(--border-divider)", background: "var(--bg-surface)", marginLeft: suffix ? 12 : 0 }}
+                onClick={() => onEditTask(t)}
+              >
+                <div className="flex flex-col">
+                  <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>
+                    {suffix ? suffix : t.name}
+                  </span>
+                  <span className="text-[11px] mono" style={{ color: "var(--text-muted)" }}>
+                    {fmtDate(t.plannedStart, false)} – {fmtDate(t.effectiveEnd, false)} ·{" "}
+                    {t.isUnassigned ? "Unassigned" : t.resourceName}
+                  </span>
+                </div>
+                <StatusPill variant={taskPill(t.status, t.isUnassigned, t.overDeadline)} />
+              </div>
+            </Fragment>
+          );
+        })}
       </div>
 
       {/* desktop gantt */}
@@ -251,11 +261,11 @@ export function Gantt({
               <div
                 key={row.task!.id}
                 onClick={() => onEditTask(row.task!)}
-                className="flex items-center gap-2 px-3 cursor-pointer hover:bg-[var(--bg-surface-hi)]"
+                className={`flex items-center gap-2 cursor-pointer hover:bg-[var(--bg-surface-hi)] ${row.suffix ? "pl-6 pr-3" : "px-3"}`}
                 style={{ height: ROW_H, borderBottom: "1px solid var(--border-divider)" }}
               >
                 <span className="text-[13px] truncate flex-1" style={{ color: "var(--text-primary)" }}>
-                  {row.task!.name}
+                  {row.suffix ? row.suffix : row.task!.name}
                 </span>
                 {row.task!.forecastEnd && (
                   <span
@@ -662,6 +672,7 @@ interface Row {
   top: number;
   height: number;
   base: string;
+  suffix: string | null;
   task?: ScheduledTask;
 }
 interface Model {
@@ -731,11 +742,11 @@ function buildModel(schedule: ProjectSchedule): Model {
   for (const { t, base, suffix } of grouped) {
     const isNewGroup = !!suffix && base !== lastBase;
     if (isNewGroup) {
-      rows.push({ kind: "group", top: y, height: HEADER_H, base });
+      rows.push({ kind: "group", top: y, height: HEADER_H, base, suffix: null });
       y += HEADER_H;
     }
     lastBase = suffix ? base : "";
-    rows.push({ kind: "task", top: y, height: ROW_H, base, task: t });
+    rows.push({ kind: "task", top: y, height: ROW_H, base, suffix, task: t });
     y += ROW_H;
   }
   const totalHeight = y;

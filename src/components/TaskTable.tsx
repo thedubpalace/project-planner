@@ -37,6 +37,60 @@ export function TaskTable({
   // chronological order (by their earliest planned start).
   const grouped = useMemo(() => groupTasks(shown), [shown]);
 
+  // Drag-reorder unit = one BA/Dev/QA cluster (dragged as a whole, since role
+  // order within a cluster is fixed) or one standalone task. Units are
+  // contiguous runs of `grouped` sharing the same base name.
+  const units = useMemo(() => {
+    const arr: { base: string; items: typeof grouped }[] = [];
+    for (const g of grouped) {
+      const last = arr[arr.length - 1];
+      if (last && last.base === g.base) last.items.push(g);
+      else arr.push({ base: g.base, items: [g] });
+    }
+    return arr;
+  }, [grouped]);
+
+  const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dropAt, setDropAt] = useState<{ idx: number; edge: "top" | "bottom" } | null>(null);
+
+  const minOrderOf = (items: typeof grouped) =>
+    Math.min(...items.map(({ t }) => t.sortOrder ?? t.id));
+
+  const orderBetween = (before: number | null, after: number | null): number => {
+    if (before == null && after == null) return 1;
+    if (before == null) return after! - 1;
+    if (after == null) return before + 1;
+    return (before + after) / 2;
+  };
+
+  const handleDrop = async (targetIdx: number, edge: "top" | "bottom") => {
+    setDropAt(null);
+    if (dragIdx === null) return;
+    const dropIdx = edge === "top" ? targetIdx : targetIdx + 1;
+    if (dropIdx === dragIdx || dropIdx === dragIdx + 1) {
+      setDragIdx(null);
+      return; // dropped back onto its own slot — no-op
+    }
+    const orderVals = units.map((u) => minOrderOf(u.items));
+    const remaining = orderVals.filter((_, i) => i !== dragIdx);
+    const adjDrop = dropIdx > dragIdx ? dropIdx - 1 : dropIdx;
+    const before = adjDrop > 0 ? remaining[adjDrop - 1] : null;
+    const after = adjDrop < remaining.length ? remaining[adjDrop] : null;
+    const newOrder = orderBetween(before, after);
+
+    const dragged = units[dragIdx];
+    setDragIdx(null);
+    try {
+      let res;
+      for (const { t } of dragged.items) {
+        res = await api.reorderTask(t.id, newOrder);
+      }
+      if (res) onSchedule(res.schedule);
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
+  };
+
   const setProgress = async (t: ScheduledTask, pct: number) => {
     try {
       const res = await api.updateProgress(t.id, pct);
@@ -125,32 +179,80 @@ export function TaskTable({
             </tr>
           </thead>
           <tbody>
-            {grouped.map(({ t, base, suffix }, idx) => {
-              const prev = grouped[idx - 1];
-              const isNewGroup = !!suffix && (idx === 0 || prev.base !== base || !prev.suffix);
+            {units.map((unit, uIdx) => {
+              const isDragging = dragIdx === uIdx;
+              const dropTop = dropAt?.idx === uIdx && dropAt.edge === "top";
+              const dropBottom = dropAt?.idx === uIdx && dropAt.edge === "bottom";
+              const dropBorderStyle: React.CSSProperties = {
+                ...(dropTop ? { boxShadow: "inset 0 2px 0 var(--accent)" } : {}),
+                ...(dropBottom ? { boxShadow: "inset 0 -2px 0 var(--accent)" } : {}),
+              };
+              const rowDragProps = {
+                onDragOver: (e: React.DragEvent) => {
+                  e.preventDefault();
+                  if (dragIdx === null) return;
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  const edge: "top" | "bottom" = e.clientY - rect.top < rect.height / 2 ? "top" : "bottom";
+                  setDropAt({ idx: uIdx, edge });
+                },
+                onDragLeave: () => setDropAt((d) => (d?.idx === uIdx ? null : d)),
+                onDrop: (e: React.DragEvent) => {
+                  e.preventDefault();
+                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  const edge: "top" | "bottom" = e.clientY - rect.top < rect.height / 2 ? "top" : "bottom";
+                  handleDrop(uIdx, edge);
+                },
+              };
+              const handle = (
+                <span
+                  draggable
+                  onDragStart={() => setDragIdx(uIdx)}
+                  onDragEnd={() => {
+                    setDragIdx(null);
+                    setDropAt(null);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="inline-block mr-2 cursor-grab active:cursor-grabbing select-none"
+                  style={{ color: "var(--text-muted)" }}
+                  title="Drag to reorder"
+                >
+                  ⠿
+                </span>
+              );
               return (
-                <Fragment key={t.id}>
-                  {isNewGroup && (
-                    <tr>
+                <Fragment key={unit.items[0].t.id}>
+                  {unit.items[0].suffix && (
+                    <tr {...rowDragProps} style={{ opacity: isDragging ? 0.4 : 1, ...dropBorderStyle }}>
                       <td
                         colSpan={8}
                         className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.04em]"
                         style={{ color: "var(--text-muted)", background: "var(--bg-surface-hi)" }}
                       >
-                        {base}
+                        {handle}
+                        {unit.base}
                       </td>
                     </tr>
                   )}
+                  {unit.items.map(({ t, suffix }) => {
+                    const standalone = unit.items.length === 1 && !suffix;
+                    return (
                   <tr
+                    key={t.id}
                     className="border-t group hover:bg-[var(--bg-surface-hi)]"
-                    style={{ borderColor: "var(--border-divider)" }}
+                    style={{
+                      borderColor: "var(--border-divider)",
+                      opacity: standalone && isDragging ? 0.4 : 1,
+                      ...(standalone ? dropBorderStyle : {}),
+                    }}
+                    {...(standalone ? rowDragProps : {})}
                   >
                 <td
-                  className="px-3 py-2.5 text-[13px] cursor-pointer"
+                  className={`py-2.5 text-[13px] cursor-pointer ${suffix ? "pl-6 pr-3" : "px-3"}`}
                   style={{ color: "var(--text-primary)" }}
                   onClick={() => onEdit(t)}
                 >
-                  {t.name}
+                  {standalone && handle}
+                  {suffix ? suffix : t.name}
                 </td>
                 <td className="px-3 py-2.5">
                   <div className="flex flex-wrap gap-1">
@@ -218,6 +320,8 @@ export function TaskTable({
                   </Button>
                 </td>
                   </tr>
+                    );
+                  })}
                 </Fragment>
               );
             })}

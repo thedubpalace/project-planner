@@ -49,7 +49,18 @@ function openDb(): DatabaseSync {
       PRIMARY KEY (task_id, depends_on)
     );
   `);
+  migrateSortOrder(db);
   return db;
+}
+
+// sort_order didn't exist in the original schema — add it for existing DBs
+// (CREATE TABLE IF NOT EXISTS above is a no-op once the table already
+// exists), then backfill so pre-existing rows keep their current (id) order.
+function migrateSortOrder(db: DatabaseSync): void {
+  const cols = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+  if (cols.some((c) => c.name === "sort_order")) return;
+  db.exec("ALTER TABLE tasks ADD COLUMN sort_order REAL NOT NULL DEFAULT 0;");
+  db.exec("UPDATE tasks SET sort_order = id;");
 }
 
 export function db(): DatabaseSync {
@@ -82,6 +93,7 @@ type TaskRow = {
   progress: number;
   status: string;
   actual_end: string | null;
+  sort_order: number;
   created_at: string;
 };
 
@@ -196,6 +208,7 @@ function mapTask(r: TaskRow): Task {
     progress: r.progress,
     status: r.status as TaskStatus,
     actualEnd: r.actual_end,
+    sortOrder: r.sort_order,
     dependsOn: depsFor(r.id),
     createdAt: r.created_at,
   };
@@ -203,11 +216,13 @@ function mapTask(r: TaskRow): Task {
 
 export function listTasksByProject(projectId: number): Task[] {
   return (
-    db().prepare("SELECT * FROM tasks WHERE project_id = ? ORDER BY id").all(projectId) as TaskRow[]
+    db()
+      .prepare("SELECT * FROM tasks WHERE project_id = ? ORDER BY sort_order, id")
+      .all(projectId) as TaskRow[]
   ).map(mapTask);
 }
 export function listAllTasks(): Task[] {
-  return (db().prepare("SELECT * FROM tasks ORDER BY id").all() as TaskRow[]).map(mapTask);
+  return (db().prepare("SELECT * FROM tasks ORDER BY sort_order, id").all() as TaskRow[]).map(mapTask);
 }
 export function getTask(id: number): Task | null {
   const r = db().prepare("SELECT * FROM tasks WHERE id = ?").get(id) as TaskRow | undefined;
@@ -236,10 +251,13 @@ function setDeps(taskId: number, deps: number[]): void {
 
 export function createTask(input: TaskInput): Task {
   const now = new Date().toISOString();
+  const maxOrder = db()
+    .prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM tasks WHERE project_id = ?")
+    .get(input.projectId) as { m: number };
   const info = db()
     .prepare(
-      `INSERT INTO tasks (project_id, name, description, estimation_hours, skills, resource_id, start_date_override, progress, status, actual_end, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'not_started', NULL, ?)`,
+      `INSERT INTO tasks (project_id, name, description, estimation_hours, skills, resource_id, start_date_override, progress, status, actual_end, sort_order, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'not_started', NULL, ?, ?)`,
     )
     .run(
       input.projectId,
@@ -249,11 +267,17 @@ export function createTask(input: TaskInput): Task {
       JSON.stringify(input.skills),
       input.resourceId ?? null,
       input.startDateOverride ?? null,
+      maxOrder.m + 1,
       now,
     );
   const id = Number(info.lastInsertRowid);
   setDeps(id, input.dependsOn ?? []);
   return getTask(id)!;
+}
+
+export function updateTaskSortOrder(id: number, sortOrder: number): Task | null {
+  db().prepare("UPDATE tasks SET sort_order = ? WHERE id = ?").run(sortOrder, id);
+  return getTask(id);
 }
 
 export function updateTask(
