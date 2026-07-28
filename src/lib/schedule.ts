@@ -190,7 +190,6 @@ export function computeTaskSchedule(input: ScheduleInput): Map<number, Scheduled
   // predecessor's final forecast is settled before its successors read it.
   for (const t of ordered) {
     const st = result.get(t.id)!;
-    if (st.forecastEnd) continue; // already has its own overrun
     let cascaded: Date | null = null;
     for (const depId of t.dependsOn) {
       const dep = result.get(depId);
@@ -198,16 +197,19 @@ export function computeTaskSchedule(input: ScheduleInput): Map<number, Scheduled
       const candidate = addBusinessDays(fromISO(dep.forecastEnd), 1);
       if (!cascaded || candidate > cascaded) cascaded = candidate;
     }
-    if (cascaded) {
-      const forecastStartDate = rollForward(cascaded);
-      if (forecastStartDate > fromISO(st.plannedStart)) {
-        const forecastEndDate = addBusinessDays(forecastStartDate, st.durationDays - 1);
-        result.set(t.id, {
-          ...st,
-          forecastStart: toISO(forecastStartDate),
-          forecastEnd: toISO(forecastEndDate),
-        });
-      }
+    if (!cascaded) continue;
+    const forecastStartDate = rollForward(cascaded);
+    if (forecastStartDate <= fromISO(st.plannedStart)) continue;
+    const forecastEndDate = addBusinessDays(forecastStartDate, st.durationDays - 1);
+    // A task can be behind on its own pace *and* pushed further by a
+    // delayed predecessor — keep whichever forecast finishes later, since
+    // it can never truly finish before its predecessor does.
+    if (!st.forecastEnd || forecastEndDate > fromISO(st.forecastEnd)) {
+      result.set(t.id, {
+        ...st,
+        forecastStart: toISO(forecastStartDate),
+        forecastEnd: toISO(forecastEndDate),
+      });
     }
   }
 
