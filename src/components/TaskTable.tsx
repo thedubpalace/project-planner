@@ -393,7 +393,7 @@ function Toolbar({
 // Draggable 1% slider — replaces the old static ProgressBar. Live value
 // updates on every drag tick for instant visual feedback; the API call
 // (onCommit) only fires on release, so dragging doesn't spam PATCH requests.
-function ProgressSlider({ value, onCommit, width = 90 }: { value: number; onCommit: (p: number) => void; width?: number }) {
+export function ProgressSlider({ value, onCommit, width = 90 }: { value: number; onCommit: (p: number) => void; width?: number }) {
   const [live, setLive] = useState(value);
   useEffect(() => setLive(value), [value]);
 
@@ -425,7 +425,7 @@ function ProgressSlider({ value, onCommit, width = 90 }: { value: number; onComm
   );
 }
 
-function Segmented({ value, onChange }: { value: number; onChange: (p: number) => void }) {
+export function Segmented({ value, onChange }: { value: number; onChange: (p: number) => void }) {
   return (
     <div className="inline-flex rounded overflow-hidden border" style={{ borderColor: "var(--border-default)" }}>
       {STEPS.map((s, i) => {

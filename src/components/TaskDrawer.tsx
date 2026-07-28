@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button, Drawer, Field, SkillChip, WorkloadBar, useToast } from "./ui";
+import { Button, Drawer, Field, SkillChip, StatusPill, WorkloadBar, taskPill, useToast } from "./ui";
+import { ProgressSlider, Segmented } from "./TaskTable";
 import { TagInput } from "./TagInput";
 import { api } from "@/lib/client";
 import { rankCandidates } from "@/lib/schedule";
@@ -34,6 +35,8 @@ export function TaskDrawer({
   const [override, setOverride] = useState<number | null | "auto">("auto");
   const [showPicker, setShowPicker] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [progress, setProgressState] = useState(0);
+  const [actualEnd, setActualEndState] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -45,7 +48,36 @@ export function TaskDrawer({
     setStartOverride(existing?.startDateOverride ?? "");
     setOverride(existing ? existing.resourceId : "auto");
     setShowPicker(false);
+    setProgressState(existing?.progress ?? 0);
+    setActualEndState(existing?.actualEnd ?? "");
   }, [open, existing]);
+
+  // Progress/status commit immediately (mirrors the inline table control)
+  // instead of waiting on the drawer's own Save, since it's a separate API
+  // endpoint (/progress) from the structural fields Save writes.
+  const commitProgress = async (pct: number) => {
+    if (!existing) return;
+    setProgressState(pct);
+    try {
+      const res = await api.updateProgress(existing.id, pct);
+      onSaved(res.schedule);
+      toast("Progress updated", "success");
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
+  };
+
+  const commitActualEnd = async (date: string) => {
+    if (!existing) return;
+    setActualEndState(date);
+    try {
+      const res = await api.updateProgress(existing.id, progress, existing.status, date);
+      onSaved(res.schedule);
+      toast("Completion date updated", "success");
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
+  };
 
   const skillSuggestions = useMemo(
     () => [...new Set(resources.flatMap((r) => r.skills))],
@@ -130,6 +162,29 @@ export function TaskDrawer({
         <Field label="Task name">
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Build components" autoFocus />
         </Field>
+        {existing && (
+          <Field label="Progress & status">
+            <div className="flex flex-col items-start gap-2">
+              <div className="flex items-center gap-3">
+                <StatusPill variant={taskPill(existing.status, existing.isUnassigned, existing.overDeadline, existing.behindPace)} />
+                {existing.status === "done" && (
+                  <input
+                    type="date"
+                    value={actualEnd}
+                    onChange={(e) => e.target.value && commitActualEnd(e.target.value)}
+                    className="!w-auto"
+                    style={{ height: 24 }}
+                    title="Actual completion date — editable, since this is what shifts dependent tasks"
+                  />
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <ProgressSlider value={progress} onCommit={commitProgress} width={120} />
+                <Segmented value={progress} onChange={commitProgress} />
+              </div>
+            </div>
+          </Field>
+        )}
         <Field label="Description">
           <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </Field>
