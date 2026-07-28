@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, differenceInCalendarDays, format, isWeekend, parseISO, startOfWeek } from "date-fns";
 import { api } from "@/lib/client";
 import type { ProjectSchedule, ResourceLoad, ScheduledTask } from "@/lib/types";
@@ -69,7 +69,6 @@ export function Gantt({
   }, [tasks]);
 
   const model = useMemo(() => buildModel(schedule), [schedule]);
-  const mobileOrder = useMemo(() => groupTasks(tasks), [tasks]);
   const unitDays = model.unit === "week" ? 7 : 1;
   const pxPerDay = model.colW / unitDays;
 
@@ -116,7 +115,11 @@ export function Gantt({
     return { estimationHours: dur * capacity };
   };
 
-  const beginDrag = (e: React.MouseEvent<HTMLElement>, mode: DragMode) => {
+  // Pointer Events (not mouse-only) so the same handlers drive touch drags
+  // on mobile too — touch-action: none on the handle elements themselves
+  // stops the browser's pan/scroll gesture from hijacking the drag, while
+  // the rest of the grid still scrolls normally by touch.
+  const beginDrag = (e: React.PointerEvent<HTMLElement>, mode: DragMode) => {
     e.preventDefault();
     e.stopPropagation();
     const taskId = Number(e.currentTarget.dataset.taskId);
@@ -136,7 +139,7 @@ export function Gantt({
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     };
-    const onMove = (e: MouseEvent) => {
+    const onMove = (e: PointerEvent) => {
       const cur = dragRef.current;
       if (!cur) return;
       const deltaPx = e.clientX - cur.startClientX;
@@ -167,11 +170,20 @@ export function Gantt({
         applyPatch(task, patch);
       }
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    // A touch drag can be interrupted by the OS/browser (e.g. an incoming
+    // gesture) — pointercancel just abandons the drag without committing.
+    const onCancel = () => {
+      dragRef.current = null;
+      setDrag(null);
+      resetCursor();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
     return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
       resetCursor();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -198,51 +210,14 @@ export function Gantt({
 
   return (
     <>
-      {/* mobile fallback */}
-      <div className="sm:hidden px-6 py-4 flex flex-col gap-2">
-        <div className="text-[12px] mb-1" style={{ color: "var(--text-muted)" }}>
-          View full timeline on a larger screen
-        </div>
-        {mobileOrder.map(({ t, base, suffix }, idx) => {
-          const prev = mobileOrder[idx - 1];
-          const isNewGroup = !!suffix && (idx === 0 || prev.base !== base || !prev.suffix);
-          return (
-            <Fragment key={t.id}>
-              {isNewGroup && (
-                <div className="text-[10px] font-semibold uppercase tracking-[0.04em] px-1 pt-2" style={{ color: "var(--text-muted)" }}>
-                  {base}
-                </div>
-              )}
-              <div
-                className="flex items-center justify-between rounded-md border px-3 py-2"
-                style={{ borderColor: "var(--border-divider)", background: "var(--bg-surface)", marginLeft: suffix ? 12 : 0 }}
-                onClick={() => onEditTask(t)}
-              >
-                <div className="flex flex-col">
-                  <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>
-                    {suffix ? suffix : t.name}
-                  </span>
-                  <span className="text-[11px] mono" style={{ color: "var(--text-muted)" }}>
-                    {fmtDate(t.plannedStart, false)} – {fmtDate(t.effectiveEnd, false)} ·{" "}
-                    {t.isUnassigned ? "Unassigned" : t.resourceName}
-                  </span>
-                </div>
-                <StatusPill variant={taskPill(t.status, t.isUnassigned, t.overDeadline)} />
-              </div>
-            </Fragment>
-          );
-        })}
-      </div>
-
-      {/* desktop gantt */}
       <Legend />
-      <div className="hidden sm:flex" style={{ height: "calc(100vh - 260px)", minHeight: 360 }}>
-        {/* left pane */}
+      <div className="flex" style={{ height: "calc(100vh - 260px)", minHeight: 360 }}>
+        {/* left pane — narrower on small screens so the scrollable grid gets more room */}
         <div
           ref={leftRef}
           onScroll={() => syncScroll("left")}
-          className="shrink-0 overflow-y-auto"
-          style={{ width: 260, borderRight: "1px solid var(--border-divider)" }}
+          className="shrink-0 overflow-y-auto w-[140px] sm:w-[260px]"
+          style={{ borderRight: "1px solid var(--border-divider)" }}
         >
           <div className="sticky top-0 z-10 flex items-center px-3 text-[11px] font-medium uppercase tracking-[0.04em]"
             style={{ height: 40, background: "var(--bg-surface)", color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}>
@@ -414,23 +389,25 @@ export function Gantt({
                         background: "var(--gantt-bar-planned-bg)",
                         border: `1px dashed ${isDragging ? "var(--accent)" : "var(--gantt-bar-planned-border)"}`,
                         cursor: "move",
+                        touchAction: "none",
                         zIndex: isDragging ? 8 : 1,
                       }}
-                      onMouseDown={(e) => beginDrag(e, "move")}
+                      onPointerDown={(e) => beginDrag(e, "move")}
                       title="Drag to move — drag the edges to resize"
                     />
-                    {/* resize handles */}
+                    {/* resize handles — hit area wider than the visible edge
+                        (touch targets need more than a few px to be reliable) */}
                     <div
                       data-task-id={t.id}
                       className="absolute"
-                      style={{ left: ghostLeft - 3, width: 8, top: (ROW_H - 20) / 2, height: 20, cursor: "ew-resize", zIndex: 9 }}
-                      onMouseDown={(e) => beginDrag(e, "resize-start")}
+                      style={{ left: ghostLeft - 9, width: 20, top: (ROW_H - 20) / 2, height: 20, cursor: "ew-resize", touchAction: "none", zIndex: 9 }}
+                      onPointerDown={(e) => beginDrag(e, "resize-start")}
                     />
                     <div
                       data-task-id={t.id}
                       className="absolute"
-                      style={{ left: ghostLeft + ghostWidth - 5, width: 8, top: (ROW_H - 20) / 2, height: 20, cursor: "ew-resize", zIndex: 9 }}
-                      onMouseDown={(e) => beginDrag(e, "resize-end")}
+                      style={{ left: ghostLeft + ghostWidth - 11, width: 20, top: (ROW_H - 20) / 2, height: 20, cursor: "ew-resize", touchAction: "none", zIndex: 9 }}
+                      onPointerDown={(e) => beginDrag(e, "resize-end")}
                     />
                     {/* foreground */}
                     {b.fg && (
@@ -483,14 +460,15 @@ export function Gantt({
                         data-task-id={t.id}
                         className="absolute"
                         style={{
-                          left: b.fg.left + fgWidth + overrunWidth - 5,
-                          width: 8,
+                          left: b.fg.left + fgWidth + overrunWidth - 11,
+                          width: 20,
                           top: (ROW_H - 20) / 2,
                           height: 20,
                           cursor: "ew-resize",
+                          touchAction: "none",
                           zIndex: 9,
                         }}
-                        onMouseDown={(e) => beginDrag(e, "actual-end")}
+                        onPointerDown={(e) => beginDrag(e, "actual-end")}
                         title="Drag to change the actual completion date"
                       />
                     )}
@@ -587,7 +565,7 @@ function Swatch({ style }: { style: React.CSSProperties }) {
 function Legend() {
   return (
     <div
-      className="hidden sm:flex items-center flex-wrap gap-x-4 gap-y-1 px-3 py-1.5 text-[10px]"
+      className="flex items-center flex-wrap gap-x-4 gap-y-1 px-3 py-1.5 text-[10px]"
       style={{ color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}
     >
       <span className="inline-flex items-center gap-1.5">
