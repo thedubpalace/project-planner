@@ -163,7 +163,78 @@ export function TaskTable({
   return (
     <div className="py-4">
       <Toolbar onAddTask={onAddTask} skills={allSkills} filter={filter} setFilter={setFilter} />
-      <div className="rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border-default)", boxShadow: "var(--shadow-card)" }}>
+      {/* mobile cards — the desktop table needs more width than a phone has
+          to stay legible even scrolled; drag-reorder and deps are desktop
+          table only (drag needs HTML5 dnd, deps aren't the mobile priority) */}
+      <div className="flex flex-col gap-3 sm:hidden">
+        {units.map((unit) => (
+          <Fragment key={`m${unit.items[0].t.id}`}>
+            {unit.items[0].suffix && (
+              <div className="text-[10px] font-semibold uppercase tracking-[0.04em] px-1 pt-2" style={{ color: "var(--text-muted)" }}>
+                {unit.base}
+              </div>
+            )}
+            {unit.items.map(({ t, suffix }) => (
+              <div
+                key={t.id}
+                className="rounded-md border p-3 flex flex-col gap-2"
+                style={{ borderColor: "var(--border-divider)", background: "var(--bg-surface)", marginLeft: suffix ? 12 : 0 }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <button
+                    className="text-left text-[13px] cursor-pointer"
+                    style={{ color: "var(--text-primary)" }}
+                    onClick={() => onEdit(t)}
+                  >
+                    {suffix ? suffix : t.name}
+                  </button>
+                  <StatusPill variant={taskPill(t.status, t.isUnassigned, t.overDeadline, t.behindPace)} />
+                </div>
+                {t.skills.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {t.skills.map((s) => (
+                      <SkillChip key={s} tag={s} />
+                    ))}
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                  {t.isUnassigned ? (
+                    <button className="cursor-pointer" style={{ color: "var(--status-danger-text)" }} onClick={() => onEdit(t)}>
+                      ⚠ Assign
+                    </button>
+                  ) : (
+                    <span>{t.resourceName}</span>
+                  )}
+                  <span className="mono">{t.estimationHours}h</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ProgressSlider value={t.progress} onCommit={(p) => setProgress(t, p)} width={90} />
+                  <Segmented value={t.progress} onChange={(p) => setProgress(t, p)} />
+                </div>
+                {t.status === "done" && (
+                  <input
+                    type="date"
+                    value={t.actualEnd ?? ""}
+                    onChange={(e) => e.target.value && setActualEnd(t, e.target.value)}
+                    style={{ height: 28 }}
+                    title="Actual completion date — editable, since this is what shifts dependent tasks"
+                  />
+                )}
+                <div className="flex justify-end gap-2 -mb-1 -mr-1">
+                  <Button variant="ghost" size="sm" onClick={() => onEdit(t)}>
+                    Edit
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => del(t)}>
+                    <span style={{ color: "var(--status-danger-text)" }}>Delete</span>
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </Fragment>
+        ))}
+      </div>
+
+      <div className="hidden sm:block rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border-default)", boxShadow: "var(--shadow-card)" }}>
         <table className="w-full border-collapse min-w-[820px]">
           <thead>
             <tr style={{ background: "var(--bg-surface)" }}>

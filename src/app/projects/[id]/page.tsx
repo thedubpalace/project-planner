@@ -83,7 +83,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
 
   if (!project || !schedule)
     return (
-      <div className="px-8 py-6">
+      <div className="px-4 sm:px-8 py-6">
         <div className="sk h-6 w-64 mb-3" />
         <div className="sk h-4 w-96 mb-8" />
         <div className="sk h-[360px] w-full" />
@@ -98,7 +98,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     <div>
       {/* header */}
       <div
-        className="px-8 py-6"
+        className="px-4 sm:px-8 py-6"
         style={{ borderBottom: over || behindTasks.length > 0 ? "none" : "1px solid var(--border-divider)" }}
       >
         <div className="flex items-center justify-between gap-3">
@@ -126,7 +126,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
       {/* deadline breach banner */}
       {over && (
         <div
-          className="fade-in flex items-center gap-3 px-8 py-3"
+          className="fade-in flex items-center gap-3 px-4 sm:px-8 py-3 flex-wrap"
           style={{ background: "var(--status-danger-bg)", borderBottom: "1px solid var(--status-danger-border)" }}
         >
           <span style={{ color: "var(--status-danger-text)" }}>⚠</span>
@@ -152,7 +152,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
           whole project past its deadline */}
       {behindTasks.length > 0 && (
         <div
-          className="fade-in flex items-center gap-3 px-8 py-3"
+          className="fade-in flex items-center gap-3 px-4 sm:px-8 py-3 flex-wrap"
           style={{ background: "var(--status-warning-bg)", borderBottom: "1px solid var(--status-warning-border)" }}
         >
           <span style={{ color: "var(--status-warning-text)" }}>⚠</span>
@@ -178,7 +178,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
       )}
 
       {/* tabs */}
-      <div className="flex items-center gap-6 px-8" style={{ borderBottom: "1px solid var(--border-divider)" }}>
+      <div className="flex items-center gap-4 sm:gap-6 px-4 sm:px-8 overflow-x-auto" style={{ borderBottom: "1px solid var(--border-divider)" }}>
         {(["timeline", "tasks", "resources"] as Tab[]).map((t) => (
           <button
             key={t}
@@ -200,12 +200,12 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
           <Gantt schedule={schedule} resources={resources} onEditTask={openEditTask} onSchedule={setSchedule} />
         )}
         {tab === "tasks" && (
-          <div className="px-8">
+          <div className="px-4 sm:px-8">
             <TaskTable schedule={schedule} onEdit={openEditTask} onSchedule={setSchedule} onAddTask={openNewTask} />
           </div>
         )}
         {tab === "resources" && (
-          <div className="px-8 py-4">
+          <div className="px-4 sm:px-8 py-4">
             <ProjectResources schedule={schedule} resources={resources} />
           </div>
         )}
@@ -262,8 +262,43 @@ function ProjectResources({
           {unassignedCount} task{unassignedCount === 1 ? "" : "s"} in this project {unassignedCount === 1 ? "is" : "are"} unassigned.
         </div>
       )}
-      <div className="rounded-lg border overflow-hidden" style={{ borderColor: "var(--border-default)", boxShadow: "var(--shadow-card)" }}>
-        <table className="w-full border-collapse">
+      {/* mobile cards */}
+      <div className="flex flex-col gap-2 sm:hidden">
+        {rows.map((r) => {
+          const count = schedule.tasks.filter((t) => t.resourceId === r.id).length;
+          return (
+            <div
+              key={r.id}
+              className="rounded-md border p-3 flex flex-col gap-2"
+              style={{ borderColor: "var(--border-divider)", background: "var(--bg-surface)" }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>
+                  {r.name}
+                </span>
+                {r.weekHours > r.weekCapacity && <StatusPill variant="overallocated" />}
+              </div>
+              {r.skills.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {r.skills.map((s) => (
+                    <SkillChip key={s} tag={s} />
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center justify-between text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                <span>
+                  {count} task{count === 1 ? "" : "s"} this project
+                </span>
+              </div>
+              <WorkloadBar hours={r.weekHours} capacity={r.weekCapacity} />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* desktop table */}
+      <div className="hidden sm:block rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border-default)", boxShadow: "var(--shadow-card)" }}>
+        <table className="w-full border-collapse min-w-[560px]">
           <thead>
             <tr style={{ background: "var(--bg-surface)" }}>
               {["Resource", "Skills", "This project", "Load (this week, all projects)"].map((h) => (

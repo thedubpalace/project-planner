@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { addDays, differenceInCalendarDays, format, isWeekend, parseISO, startOfWeek } from "date-fns";
 import { api } from "@/lib/client";
 import type { ProjectSchedule, ResourceLoad, ScheduledTask } from "@/lib/types";
@@ -68,6 +68,7 @@ export function Gantt({
     }
   }, [tasks]);
 
+  const mobileOrder = useMemo(() => groupTasks(tasks), [tasks]);
   const model = useMemo(() => buildModel(schedule), [schedule]);
   const unitDays = model.unit === "week" ? 7 : 1;
   const pxPerDay = model.colW / unitDays;
@@ -210,14 +211,55 @@ export function Gantt({
 
   return (
     <>
+      {/* mobile fallback — the drag-to-edit Gantt needs more width than a
+          phone screen has to stay usable, so small screens get a plain
+          read/tap list instead (tap a row to open the edit drawer) */}
+      <div className="sm:hidden px-6 py-4 flex flex-col gap-2">
+        <div className="text-[12px] mb-1" style={{ color: "var(--text-muted)" }}>
+          View full timeline on a larger screen
+        </div>
+        {mobileOrder.map(({ t, base, suffix }, idx) => {
+          const prev = mobileOrder[idx - 1];
+          const isNewGroup = !!suffix && (idx === 0 || prev.base !== base || !prev.suffix);
+          return (
+            <Fragment key={t.id}>
+              {isNewGroup && (
+                <div className="text-[10px] font-semibold uppercase tracking-[0.04em] px-1 pt-2" style={{ color: "var(--text-muted)" }}>
+                  {base}
+                </div>
+              )}
+              <div
+                className="flex items-center justify-between rounded-md border px-3 py-2"
+                style={{ borderColor: "var(--border-divider)", background: "var(--bg-surface)", marginLeft: suffix ? 12 : 0 }}
+                onClick={() => onEditTask(t)}
+              >
+                <div className="flex flex-col">
+                  <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>
+                    {suffix ? suffix : t.name}
+                  </span>
+                  <span className="text-[11px] mono" style={{ color: "var(--text-muted)" }}>
+                    {fmtDate(t.plannedStart, false)} – {fmtDate(t.effectiveEnd, false)} ·{" "}
+                    {t.isUnassigned ? "Unassigned" : t.resourceName}
+                  </span>
+                </div>
+                <StatusPill variant={taskPill(t.status, t.isUnassigned, t.overDeadline)} />
+              </div>
+            </Fragment>
+          );
+        })}
+      </div>
+
+      {/* desktop/tablet gantt — still Pointer Events underneath, so a touch
+          screen wide enough to show it (tablet landscape, etc.) can still
+          drag the bars, not just mouse users */}
       <Legend />
-      <div className="flex" style={{ height: "calc(100vh - 260px)", minHeight: 360 }}>
-        {/* left pane — narrower on small screens so the scrollable grid gets more room */}
+      <div className="hidden sm:flex" style={{ height: "calc(100vh - 260px)", minHeight: 360 }}>
+        {/* left pane */}
         <div
           ref={leftRef}
           onScroll={() => syncScroll("left")}
-          className="shrink-0 overflow-y-auto w-[140px] sm:w-[260px]"
-          style={{ borderRight: "1px solid var(--border-divider)" }}
+          className="shrink-0 overflow-y-auto"
+          style={{ width: 260, borderRight: "1px solid var(--border-divider)" }}
         >
           <div className="sticky top-0 z-10 flex items-center px-3 text-[11px] font-medium uppercase tracking-[0.04em]"
             style={{ height: 40, background: "var(--bg-surface)", color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}>
@@ -565,7 +607,7 @@ function Swatch({ style }: { style: React.CSSProperties }) {
 function Legend() {
   return (
     <div
-      className="flex items-center flex-wrap gap-x-4 gap-y-1 px-3 py-1.5 text-[10px]"
+      className="hidden sm:flex items-center flex-wrap gap-x-4 gap-y-1 px-3 py-1.5 text-[10px]"
       style={{ color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}
     >
       <span className="inline-flex items-center gap-1.5">
