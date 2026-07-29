@@ -8,6 +8,7 @@ import {
   Button,
   SkillChip,
   StatusPill,
+  fmtShifted,
   taskPill,
   useToast,
 } from "./ui";
@@ -27,11 +28,16 @@ export function TaskTable({
 }) {
   const toast = useToast();
   const [filter, setFilter] = useState<string | null>(null);
+  const [atRiskOnly, setAtRiskOnly] = useState(false);
   const [confirm, setConfirm] = useState<{ task: ScheduledTask; deps: { id: number; name: string }[] } | null>(null);
 
   const tasks = schedule.tasks;
   const allSkills = [...new Set(tasks.flatMap((t) => t.skills))];
-  const shown = filter ? tasks.filter((t) => t.skills.includes(filter)) : tasks;
+  const isAtRisk = (t: ScheduledTask) => t.overDeadline || t.behindPace || t.isUnassigned;
+  const atRiskCount = tasks.filter(isAtRisk).length;
+  const shown = tasks
+    .filter((t) => !filter || t.skills.includes(filter))
+    .filter((t) => !atRiskOnly || isAtRisk(t));
 
   // Cluster same-group tasks together; groups themselves stay in roughly
   // chronological order (by their earliest planned start).
@@ -96,12 +102,8 @@ export function TaskTable({
       const res = await api.updateProgress(t.id, pct);
       onSchedule(res.schedule);
       if (res.shifted.length > 0) {
-        const tail = res.breached
-          ? " — deadline exceeded"
-          : res.atRisk
-            ? " — 1 now at risk"
-            : "";
-        toast(`${res.shifted.length} task${res.shifted.length > 1 ? "s" : ""} shifted${tail}`, res.breached ? "error" : "info");
+        const tail = res.breached ? " — deadline exceeded" : res.atRisk ? " — 1 now at risk" : "";
+        toast(`Shifted: ${fmtShifted(res.shifted.map((s) => s.name))}${tail}`, res.breached ? "error" : "info");
       } else {
         toast("Progress updated", "success");
       }
@@ -116,7 +118,7 @@ export function TaskTable({
       onSchedule(res.schedule);
       toast(
         res.shifted.length > 0
-          ? `Completion date updated — ${res.shifted.length} task${res.shifted.length > 1 ? "s" : ""} shifted`
+          ? `Completion date updated — shifted: ${fmtShifted(res.shifted.map((s) => s.name))}`
           : "Completion date updated",
         "success",
       );
@@ -144,7 +146,7 @@ export function TaskTable({
   if (tasks.length === 0) {
     return (
       <div className="py-4">
-        <Toolbar onAddTask={onAddTask} skills={[]} filter={null} setFilter={setFilter} />
+        <Toolbar onAddTask={onAddTask} skills={[]} filter={null} setFilter={setFilter} atRiskOnly={atRiskOnly} setAtRiskOnly={setAtRiskOnly} atRiskCount={0} />
         <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
           <div className="text-[14px]" style={{ color: "var(--text-secondary)" }}>
             No tasks yet
@@ -162,7 +164,15 @@ export function TaskTable({
 
   return (
     <div className="py-4">
-      <Toolbar onAddTask={onAddTask} skills={allSkills} filter={filter} setFilter={setFilter} />
+      <Toolbar
+        onAddTask={onAddTask}
+        skills={allSkills}
+        filter={filter}
+        setFilter={setFilter}
+        atRiskOnly={atRiskOnly}
+        setAtRiskOnly={setAtRiskOnly}
+        atRiskCount={atRiskCount}
+      />
       {/* mobile cards — the desktop table needs more width than a phone has
           to stay legible even scrolled; drag-reorder and deps are desktop
           table only (drag needs HTML5 dnd, deps aren't the mobile priority) */}
@@ -401,7 +411,7 @@ export function TaskTable({
       </div>
 
       {confirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "oklch(0% 0 0 / 55%)" }} onClick={() => setConfirm(null)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "var(--scrim-modal)" }} onClick={() => setConfirm(null)}>
           <div
             className="scale-in rounded-[10px] border p-5 max-w-[420px]"
             style={{ background: "var(--bg-modal)", borderColor: "var(--status-danger-border)", boxShadow: "var(--shadow-modal)" }}
@@ -433,17 +443,37 @@ function Toolbar({
   skills,
   filter,
   setFilter,
+  atRiskOnly,
+  setAtRiskOnly,
+  atRiskCount,
 }: {
   onAddTask: () => void;
   skills: string[];
   filter: string | null;
   setFilter: (s: string | null) => void;
+  atRiskOnly: boolean;
+  setAtRiskOnly: (v: boolean) => void;
+  atRiskCount: number;
 }) {
   return (
     <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
-      <Button variant="primary" size="sm" onClick={onAddTask}>
-        + Add Task
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button variant="primary" size="sm" onClick={onAddTask}>
+          + Add Task
+        </Button>
+        <button
+          onClick={() => setAtRiskOnly(!atRiskOnly)}
+          className="inline-flex items-center gap-1 h-8 px-3 rounded-md border text-[12px] cursor-pointer transition-colors"
+          style={{
+            borderColor: atRiskOnly ? "var(--status-danger-border)" : "var(--border-default)",
+            background: atRiskOnly ? "var(--status-danger-bg)" : "transparent",
+            color: atRiskOnly ? "var(--status-danger-text)" : "var(--text-secondary)",
+          }}
+          title="Show only over-deadline, behind-pace, or unassigned tasks"
+        >
+          ⚠ At risk{atRiskCount > 0 ? ` (${atRiskCount})` : ""}
+        </button>
+      </div>
       {skills.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap">
           {skills.map((s) => (

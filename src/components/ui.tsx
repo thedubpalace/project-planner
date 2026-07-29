@@ -16,6 +16,16 @@ export function fmtDate(iso: string | null | undefined, withYear = true): string
   }
 }
 
+// Names the shifted tasks inline instead of just a count, so a cascade's
+// impact is visible where the edit happened rather than requiring a tab
+// switch to the Timeline to see which tasks moved.
+export function fmtShifted(names: string[], max = 3): string {
+  if (names.length === 0) return "";
+  const shown = names.slice(0, max).join(", ");
+  const rest = names.length - max;
+  return rest > 0 ? `${shown} +${rest} more` : shown;
+}
+
 // --- Button -------------------------------------------------------------------
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -243,7 +253,7 @@ export function Modal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "oklch(0% 0 0 / 55%)" }}
+      style={{ background: "var(--scrim-modal)" }}
       onClick={onClose}
     >
       <div
@@ -286,7 +296,7 @@ export function Drawer({
   }, [open, onClose]);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" style={{ background: "oklch(0% 0 0 / 45%)" }} onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex justify-end" style={{ background: "var(--scrim-drawer)" }} onClick={onClose}>
       <div
         className="drawer-in h-full overflow-y-auto border-l flex flex-col"
         style={{ width, maxWidth: "100%", background: "var(--bg-modal)", borderColor: "var(--border-default)", boxShadow: "var(--shadow-modal)" }}

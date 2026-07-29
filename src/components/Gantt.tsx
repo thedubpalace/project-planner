@@ -23,6 +23,7 @@ interface DragState {
   mode: DragMode;
   startClientX: number;
   deltaDays: number;
+  pointerId: number;
 }
 type Patch = { startDateOverride?: string; estimationHours?: number } | { actualEnd: string };
 interface PendingCommit {
@@ -116,6 +117,30 @@ export function Gantt({
     return { estimationHours: dur * capacity };
   };
 
+  // Shared by both the pointer-drag release (onUp) and the keyboard nudge
+  // path, so a committed edit behaves identically regardless of input method.
+  const commitDrag = (taskId: number, mode: DragMode, deltaDays: number) => {
+    const task = tasks.find((t) => t.id === taskId);
+    if (!task) return;
+    const patch = buildPatch(task, mode, deltaDays);
+    if (!patch) return;
+    if (task.status === "done" && mode !== "actual-end") {
+      setPendingConfirm({ taskId: task.id, taskName: task.name, patch });
+    } else {
+      applyPatch(task, patch);
+    }
+  };
+
+  // Arrow-key equivalent of a drag release, for handles with no pointer.
+  // Left/Right = 1 day, Shift+Left/Right = 5 days.
+  const onHandleKeyDown = (e: React.KeyboardEvent<HTMLElement>, taskId: number, mode: DragMode) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const step = e.shiftKey ? 5 : 1;
+    const deltaDays = e.key === "ArrowLeft" ? -step : step;
+    commitDrag(taskId, mode, deltaDays);
+  };
+
   // Pointer Events (not mouse-only) so the same handlers drive touch drags
   // on mobile too — touch-action: none on the handle elements themselves
   // stops the browser's pan/scroll gesture from hijacking the drag, while
@@ -124,7 +149,7 @@ export function Gantt({
     e.preventDefault();
     e.stopPropagation();
     const taskId = Number(e.currentTarget.dataset.taskId);
-    const state: DragState = { taskId, mode, startClientX: e.clientX, deltaDays: 0 };
+    const state: DragState = { taskId, mode, startClientX: e.clientX, deltaDays: 0, pointerId: e.pointerId };
     dragRef.current = state;
     setDrag(state);
     // Force the cursor for the whole drag — otherwise it reflects whatever
@@ -142,7 +167,10 @@ export function Gantt({
     };
     const onMove = (e: PointerEvent) => {
       const cur = dragRef.current;
-      if (!cur) return;
+      // Ignore any pointer that isn't the one that started this drag — a
+      // second simultaneous pointer (two-finger touch, stylus+finger) must
+      // not hijack an in-flight drag's task/delta.
+      if (!cur || e.pointerId !== cur.pointerId) return;
       const deltaPx = e.clientX - cur.startClientX;
       const deltaDays = Math.round(deltaPx / pxPerDay);
       if (deltaDays !== cur.deltaDays) {
@@ -151,29 +179,23 @@ export function Gantt({
         setDrag(next);
       }
     };
-    const onUp = () => {
+    const onUp = (e: PointerEvent) => {
       const cur = dragRef.current;
+      if (!cur || e.pointerId !== cur.pointerId) return;
       dragRef.current = null;
       setDrag(null);
       resetCursor();
-      if (!cur) return;
-      const task = tasks.find((t) => t.id === cur.taskId);
-      if (!task) return;
-      const patch = buildPatch(task, cur.mode, cur.deltaDays);
-      if (!patch) return;
-      // The done-task confirm gate is for retroactively editing the PLAN of a
-      // finished task (surprising); dragging the actual-completion handle is
-      // the direct, expected way to correct that date, same as the Tasks tab's
-      // date input for it — no extra gate needed there.
-      if (task.status === "done" && cur.mode !== "actual-end") {
-        setPendingConfirm({ taskId: task.id, taskName: task.name, patch });
-      } else {
-        applyPatch(task, patch);
-      }
+      // The done-task confirm gate (inside commitDrag) is for retroactively
+      // editing the PLAN of a finished task (surprising); dragging the
+      // actual-completion handle is the direct, expected way to correct that
+      // date, same as the Tasks tab's date input for it — no extra gate there.
+      commitDrag(cur.taskId, cur.mode, cur.deltaDays);
     };
     // A touch drag can be interrupted by the OS/browser (e.g. an incoming
     // gesture) — pointercancel just abandons the drag without committing.
-    const onCancel = () => {
+    const onCancel = (e: PointerEvent) => {
+      const cur = dragRef.current;
+      if (!cur || e.pointerId !== cur.pointerId) return;
       dragRef.current = null;
       setDrag(null);
       resetCursor();
@@ -419,10 +441,13 @@ export function Gantt({
                 }
                 return (
                   <div key={t.id} className="absolute" style={{ top: b.top, height: ROW_H, left: 0, right: 0 }}>
-                    {/* planned ghost — draggable to move/resize the plan */}
+                    {/* planned ghost — draggable to move/resize the plan.
+                        Also keyboard-focusable: arrow keys nudge the whole
+                        plan a day at a time (Shift = 5 days) for anyone who
+                        can't drag. */}
                     <div
                       data-task-id={t.id}
-                      className="absolute rounded"
+                      className="absolute rounded gantt-handle"
                       style={{
                         left: ghostLeft,
                         width: ghostWidth,
@@ -435,7 +460,11 @@ export function Gantt({
                         zIndex: isDragging ? 8 : 1,
                       }}
                       onPointerDown={(e) => beginDrag(e, "move")}
-                      title="Drag to move — drag the edges to resize"
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Move ${t.name} — use arrow keys to shift by day`}
+                      onKeyDown={(e) => onHandleKeyDown(e, t.id, "move")}
+                      title="Drag to move (or focus + arrow keys) — drag the edges to resize"
                     />
                     {/* resize handles — hit area wider than the visible edge
                         (touch targets need more than a few px to be reliable) */}
@@ -496,13 +525,16 @@ export function Gantt({
                       />
                     )}
                     {/* actual-completion handle — done tasks only; drags actualEnd
-                        directly (the date that actually shifts dependents), not the plan */}
+                        directly (the date that actually shifts dependents), not the plan.
+                        When there's no overrun this lands on the exact same pixels as the
+                        resize-end handle above (both sit at the plan's right edge) — nudge
+                        it clear so both stay reachable instead of one silently winning. */}
                     {t.status === "done" && b.fg && (
                       <div
                         data-task-id={t.id}
-                        className="absolute"
+                        className="absolute gantt-handle"
                         style={{
-                          left: b.fg.left + fgWidth + overrunWidth - 11,
+                          left: b.fg.left + fgWidth + overrunWidth - 11 + (overrunWidth === 0 ? 20 : 0),
                           width: 20,
                           top: (ROW_H - 20) / 2,
                           height: 20,
@@ -511,7 +543,11 @@ export function Gantt({
                           zIndex: 9,
                         }}
                         onPointerDown={(e) => beginDrag(e, "actual-end")}
-                        title="Drag to change the actual completion date"
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Change actual completion date of ${t.name} — use arrow keys`}
+                        onKeyDown={(e) => onHandleKeyDown(e, t.id, "actual-end")}
+                        title="Drag (or focus + arrow keys) to change the actual completion date"
                       />
                     )}
                     {/* forecast — own delay (tail past the plan) and cascaded shift now
@@ -563,7 +599,7 @@ export function Gantt({
       {pendingConfirm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: "oklch(0% 0 0 / 55%)" }}
+          style={{ background: "var(--scrim-modal)" }}
           onClick={() => setPendingConfirm(null)}
         >
           <div

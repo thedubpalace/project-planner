@@ -73,6 +73,12 @@
   --shadow-card: 0 1px 2px oklch(25% 0.02 60 / 5%), 0 6px 16px oklch(25% 0.02 60 / 6%);
   --shadow-modal: 0 12px 32px oklch(20% 0.02 60 / 16%), 0 2px 8px oklch(20% 0.02 60 / 10%);
 
+  /* overlay scrims — modal/confirm dialogs get the darker one (fully
+     obscures the page behind); the drawer gets a lighter one since it only
+     covers part of the screen and the page context stays partly visible */
+  --scrim-modal: oklch(0% 0 0 / 55%);
+  --scrim-drawer: oklch(0% 0 0 / 45%);
+
   /* easing */
   --ease-panel: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-snap: cubic-bezier(0.4, 0, 0.2, 1);
@@ -164,6 +170,14 @@ input[type="range"].progress-slider {
 }
 input[type="range"].progress-slider:focus {
   border: none;
+  outline: 2px solid var(--accent-border);
+  outline-offset: 2px;
+}
+
+/* Gantt drag handles — plain divs made keyboard-operable (tabIndex + arrow
+   keys); focus-visible only shows the ring for keyboard nav, not the
+   pointerdown that also focuses them on click. */
+.gantt-handle:focus-visible {
   outline: 2px solid var(--accent-border);
   outline-offset: 2px;
 }

@@ -16,6 +16,8 @@ colors:
   status-good: "oklch(42% 0.13 145)"
   status-warning: "oklch(45% 0.13 85)"
   status-danger: "oklch(45% 0.17 25)"
+  scrim-modal: "oklch(0% 0 0 / 55%)"
+  scrim-drawer: "oklch(0% 0 0 / 45%)"
 typography:
   body:
     fontFamily: "Inter, Sarabun, system-ui, sans-serif"
@@ -132,6 +134,10 @@ Hybrid: the Gantt panes stay flat (borders only, no shadow — they're working d
 - **Nav** (`0 1px 3px oklch(25% 0.02 60 / 6%)`): sticky top bar, just enough separation to read as "above" scrolled content.
 - **Card** (`0 1px 2px oklch(25% 0.02 60 / 5%), 0 6px 16px oklch(25% 0.02 60 / 6%)`): project cards, table wrappers, toasts — a soft two-layer lift.
 - **Modal** (`0 12px 32px oklch(20% 0.02 60 / 16%), 0 2px 8px oklch(20% 0.02 60 / 10%)`): modals, drawers, confirm dialogs — the deepest shadow in the system, reserved for content that overlays everything else.
+
+### Scrim Vocabulary
+- **Modal scrim** (`--scrim-modal`, `oklch(0% 0 0 / 55%)`): backdrop behind centered modals and confirm dialogs — fully obscures the page behind, since these fully interrupt the flow.
+- **Drawer scrim** (`--scrim-drawer`, `oklch(0% 0 0 / 45%)`): backdrop behind the side drawer — lighter than the modal scrim since the drawer only covers part of the screen and the page context stays partly visible.
 
 ### Named Rules
 **The Working-Diagram Exception Rule.** Gantt panes never get a shadow — the "spreadsheet, not card" register is deliberate and shadows would contradict it.

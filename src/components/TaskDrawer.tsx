@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button, Drawer, Field, SkillChip, StatusPill, WorkloadBar, taskPill, useToast } from "./ui";
+import { Button, Drawer, Field, SkillChip, StatusPill, WorkloadBar, fmtShifted, taskPill, useToast } from "./ui";
 import { ProgressSlider, Segmented } from "./TaskTable";
 import { TagInput } from "./TagInput";
 import { api } from "@/lib/client";
@@ -61,7 +61,10 @@ export function TaskDrawer({
     try {
       const res = await api.updateProgress(existing.id, pct);
       onSaved(res.schedule);
-      toast("Progress updated", "success");
+      toast(
+        res.shifted.length > 0 ? `Shifted: ${fmtShifted(res.shifted.map((s) => s.name))}` : "Progress updated",
+        res.breached ? "error" : "success",
+      );
     } catch (e) {
       toast((e as Error).message, "error");
     }
@@ -73,7 +76,12 @@ export function TaskDrawer({
     try {
       const res = await api.updateProgress(existing.id, progress, existing.status, date);
       onSaved(res.schedule);
-      toast("Completion date updated", "success");
+      toast(
+        res.shifted.length > 0
+          ? `Completion date updated — shifted: ${fmtShifted(res.shifted.map((s) => s.name))}`
+          : "Completion date updated",
+        "success",
+      );
     } catch (e) {
       toast((e as Error).message, "error");
     }
