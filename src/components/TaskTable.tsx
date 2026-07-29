@@ -176,7 +176,7 @@ export function TaskTable({
       {/* mobile cards — the desktop table needs more width than a phone has
           to stay legible even scrolled; drag-reorder and deps are desktop
           table only (drag needs HTML5 dnd, deps aren't the mobile priority) */}
-      <div className="flex flex-col gap-3 sm:hidden">
+      <div className="flex flex-col gap-3 md:hidden">
         {units.map((unit) => (
           <Fragment key={`m${unit.items[0].t.id}`}>
             {unit.items[0].suffix && (
@@ -187,10 +187,10 @@ export function TaskTable({
             {unit.items.map(({ t, suffix }) => (
               <div
                 key={t.id}
-                className="rounded-md border p-3 flex flex-col gap-2"
-                style={{ borderColor: "var(--border-divider)", background: "var(--bg-surface)", marginLeft: suffix ? 12 : 0 }}
+                className="rounded-md border p-3 flex flex-col gap-2.5"
+                style={{ borderColor: "var(--border-divider)", background: "var(--bg-surface)", boxShadow: "var(--shadow-card)", marginLeft: suffix ? 12 : 0 }}
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-start justify-between gap-2 -mb-0.5">
                   <button
                     className="text-left text-[13px] cursor-pointer"
                     style={{ color: "var(--text-primary)" }}
@@ -202,9 +202,14 @@ export function TaskTable({
                 </div>
                 {t.skills.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {t.skills.map((s) => (
+                    {t.skills.slice(0, 3).map((s) => (
                       <SkillChip key={s} tag={s} />
                     ))}
+                    {t.skills.length > 3 && (
+                      <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                        +{t.skills.length - 3}
+                      </span>
+                    )}
                   </div>
                 )}
                 <div className="flex items-center justify-between text-[12px]" style={{ color: "var(--text-secondary)" }}>
@@ -217,10 +222,7 @@ export function TaskTable({
                   )}
                   <span className="mono">{t.estimationHours}h</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <ProgressSlider value={t.progress} onCommit={(p) => setProgress(t, p)} width={90} />
-                  <Segmented value={t.progress} onChange={(p) => setProgress(t, p)} />
-                </div>
+                <ProgressSlider value={t.progress} onCommit={(p) => setProgress(t, p)} width={140} />
                 {t.status === "done" && (
                   <input
                     type="date"
@@ -230,7 +232,7 @@ export function TaskTable({
                     title="Actual completion date — editable, since this is what shifts dependent tasks"
                   />
                 )}
-                <div className="flex justify-end gap-2 -mb-1 -mr-1">
+                <div className="flex justify-end gap-2 mt-1 -mb-1 -mr-1">
                   <Button variant="ghost" size="sm" onClick={() => onEdit(t)}>
                     Edit
                   </Button>
@@ -244,7 +246,7 @@ export function TaskTable({
         ))}
       </div>
 
-      <div className="hidden sm:block rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border-default)", boxShadow: "var(--shadow-card)" }}>
+      <div className="hidden md:block rounded-lg border overflow-x-auto" style={{ borderColor: "var(--border-default)", boxShadow: "var(--shadow-card)" }}>
         <table className="w-full border-collapse min-w-[820px]">
           <thead>
             <tr style={{ background: "var(--bg-surface)" }}>

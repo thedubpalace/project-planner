@@ -37,11 +37,13 @@ export function Gantt({
   resources,
   onEditTask,
   onSchedule,
+  onAddTask,
 }: {
   schedule: ProjectSchedule;
   resources: ResourceLoad[];
   onEditTask: (t: ScheduledTask) => void;
   onSchedule: (s: ProjectSchedule) => void;
+  onAddTask: () => void;
 }) {
   const toast = useToast();
   const tasks = schedule.tasks;
@@ -218,9 +220,12 @@ export function Gantt({
         <div className="text-[14px]" style={{ color: "var(--text-secondary)" }}>
           No tasks yet
         </div>
-        <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>
+        <div className="text-[12px] mb-1" style={{ color: "var(--text-muted)" }}>
           Add a task to see it on the timeline
         </div>
+        <Button variant="primary" size="sm" onClick={onAddTask}>
+          + Add Task
+        </Button>
       </div>
     );
   }

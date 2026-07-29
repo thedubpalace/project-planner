@@ -159,12 +159,13 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
           <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>
             <strong style={{ color: "var(--status-warning-text)" }}>{behindTasks.length}</strong> task
             {behindTasks.length === 1 ? " is" : "s are"} behind pace:{" "}
-            {behindTasks.map((t, i) => (
+            {behindTasks.slice(0, 3).map((t, i) => (
               <span key={t.id}>
                 {i > 0 && ", "}
                 <strong style={{ color: "var(--status-warning-text)" }}>{t.name}</strong>
               </span>
             ))}
+            {behindTasks.length > 3 && ` +${behindTasks.length - 3} more`}
             {" "}— less progress logged than the time already elapsed against plan.
           </span>
           <button
@@ -197,7 +198,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
       {/* tab content */}
       <div className="fade-in" key={tab}>
         {tab === "timeline" && (
-          <Gantt schedule={schedule} resources={resources} onEditTask={openEditTask} onSchedule={setSchedule} />
+          <Gantt schedule={schedule} resources={resources} onEditTask={openEditTask} onSchedule={setSchedule} onAddTask={openNewTask} />
         )}
         {tab === "tasks" && (
           <div className="px-4 sm:px-8">
@@ -269,10 +270,10 @@ function ProjectResources({
           return (
             <div
               key={r.id}
-              className="rounded-md border p-3 flex flex-col gap-2"
-              style={{ borderColor: "var(--border-divider)", background: "var(--bg-surface)" }}
+              className="rounded-md border p-3 flex flex-col gap-2.5"
+              style={{ borderColor: "var(--border-divider)", background: "var(--bg-surface)", boxShadow: "var(--shadow-card)" }}
             >
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-between gap-2 -mb-0.5">
                 <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>
                   {r.name}
                 </span>
@@ -285,11 +286,9 @@ function ProjectResources({
                   ))}
                 </div>
               )}
-              <div className="flex items-center justify-between text-[12px]" style={{ color: "var(--text-secondary)" }}>
-                <span>
-                  {count} task{count === 1 ? "" : "s"} this project
-                </span>
-              </div>
+              <span className="text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                {count} task{count === 1 ? "" : "s"} this project
+              </span>
               <WorkloadBar hours={r.weekHours} capacity={r.weekCapacity} />
             </div>
           );
