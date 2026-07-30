@@ -8,6 +8,11 @@
    ========================================================================== */
 
 :root {
+  /* layout */
+  --nav-h: 56px; /* Navbar's real height (h-14) — read by pages that need to
+                    fill the viewport below it, so it isn't duplicated as a
+                    second hardcoded number */
+
   /* base surfaces */
   --bg-base: #f7f4f0;
   --bg-surface: #ffffff;

@@ -94,11 +94,16 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   const affected = schedule.affectedTaskIds.length;
   const behindTasks = schedule.tasks.filter((t) => t.behindPace);
 
+  // Timeline's Gantt wants to fill the viewport (its own panes scroll
+  // internally); Tasks/Resources just grow the page naturally — so the
+  // fill-to-available-space flex chain below is scoped to this tab only.
+  const isTimeline = tab === "timeline";
+
   return (
-    <div>
+    <div className={isTimeline ? "flex flex-col" : undefined} style={isTimeline ? { minHeight: "calc(100dvh - var(--nav-h))" } : undefined}>
       {/* header */}
       <div
-        className="px-4 sm:px-8 py-6"
+        className={`px-4 sm:px-8 py-6${isTimeline ? " shrink-0" : ""}`}
         style={{ borderBottom: over || behindTasks.length > 0 ? "none" : "1px solid var(--border-divider)" }}
       >
         <div className="flex items-center justify-between gap-3">
@@ -126,7 +131,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
       {/* deadline breach banner */}
       {over && (
         <div
-          className="fade-in flex items-center gap-3 px-4 sm:px-8 py-3 flex-wrap"
+          className={`fade-in flex items-center gap-3 px-4 sm:px-8 py-3 flex-wrap${isTimeline ? " shrink-0" : ""}`}
           style={{ background: "var(--status-danger-bg)", borderBottom: "1px solid var(--status-danger-border)" }}
         >
           <span style={{ color: "var(--status-danger-text)" }}>⚠</span>
@@ -152,7 +157,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
           whole project past its deadline */}
       {behindTasks.length > 0 && (
         <div
-          className="fade-in flex items-center gap-3 px-4 sm:px-8 py-3 flex-wrap"
+          className={`fade-in flex items-center gap-3 px-4 sm:px-8 py-3 flex-wrap${isTimeline ? " shrink-0" : ""}`}
           style={{ background: "var(--status-warning-bg)", borderBottom: "1px solid var(--status-warning-border)" }}
         >
           <span style={{ color: "var(--status-warning-text)" }}>⚠</span>
@@ -179,7 +184,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
       )}
 
       {/* tabs */}
-      <div className="flex items-center gap-4 sm:gap-6 px-4 sm:px-8 overflow-x-auto" style={{ borderBottom: "1px solid var(--border-divider)" }}>
+      <div className={`flex items-center gap-4 sm:gap-6 px-4 sm:px-8 overflow-x-auto${isTimeline ? " shrink-0" : ""}`} style={{ borderBottom: "1px solid var(--border-divider)" }}>
         {(["timeline", "tasks", "resources"] as Tab[]).map((t) => (
           <button
             key={t}
@@ -196,7 +201,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
       </div>
 
       {/* tab content */}
-      <div className="fade-in" key={tab}>
+      <div className={`fade-in${isTimeline ? " flex-1 min-h-0 flex flex-col" : ""}`} key={tab}>
         {tab === "timeline" && (
           <Gantt schedule={schedule} resources={resources} onEditTask={openEditTask} onSchedule={setSchedule} onAddTask={openNewTask} />
         )}

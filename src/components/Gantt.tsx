@@ -9,8 +9,13 @@ import { buildDependencyPath } from "@/lib/ganttConnector";
 import { groupTasks } from "@/lib/taskGroup";
 import { Button, StatusPill, fmtDate, taskPill, useToast } from "./ui";
 
-const ROW_H = 36;
-const HEADER_H = 24;
+const ROW_H = 32;
+const HEADER_H = 20;
+// Shared by the left pane's sticky "Task" header and the date-header row
+// above the grid — they're two independently-scrolled panes with scrollTop
+// copied 1:1 (see syncScroll), so their header heights must stay identical
+// or rows visibly drift from their bars as soon as the user scrolls.
+const PANE_HEADER_H = 32;
 const DEFAULT_CAPACITY = 8;
 
 function d(iso: string): Date {
@@ -280,7 +285,7 @@ export function Gantt({
           screen wide enough to show it (tablet landscape, etc.) can still
           drag the bars, not just mouse users */}
       <Legend />
-      <div className="hidden sm:flex" style={{ height: "calc(100vh - 260px)", minHeight: 360 }}>
+      <div className="hidden sm:flex flex-1 min-h-0" style={{ minHeight: 360 }}>
         {/* left pane */}
         <div
           ref={leftRef}
@@ -289,7 +294,7 @@ export function Gantt({
           style={{ width: 260, borderRight: "1px solid var(--border-divider)" }}
         >
           <div className="sticky top-0 z-10 flex items-center px-3 text-[11px] font-medium uppercase tracking-[0.04em]"
-            style={{ height: 40, background: "var(--bg-surface)", color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}>
+            style={{ height: PANE_HEADER_H, background: "var(--bg-surface)", color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}>
             Task
           </div>
           {model.rows.map((row) =>
@@ -338,7 +343,7 @@ export function Gantt({
             {/* date header */}
             <div
               className="sticky top-0 z-20 flex"
-              style={{ height: 40, background: "var(--bg-surface)", borderBottom: "1px solid var(--border-divider)" }}
+              style={{ height: PANE_HEADER_H, background: "var(--bg-surface)", borderBottom: "1px solid var(--border-divider)" }}
             >
               {model.columns.map((c, i) => (
                 <div
