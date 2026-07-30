@@ -32,6 +32,21 @@ export interface Task {
   sortOrder: number; // manual display order (drag-to-reorder in Task Table)
   dependsOn: number[]; // predecessor task ids (finish-to-start)
   createdAt: string;
+  groupId: number | null; // task_groups.id this task clusters under, or null (standalone)
+  groupName: string | null; // denormalized — the group's own name, for display without a second fetch
+  groupSortOrder: number | null; // denormalized — the group's display-order position
+}
+
+// A named cluster of tasks within one project (e.g. one imported spreadsheet
+// row's BA/Dev/QA split). Tasks reference a group by id; the group itself
+// carries the shared name and its own position among other groups/standalone
+// tasks in the Task Table / Timeline.
+export interface TaskGroup {
+  id: number;
+  projectId: number;
+  name: string;
+  sortOrder: number;
+  createdAt: string;
 }
 
 // Computed schedule fields layered on top of a Task

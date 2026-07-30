@@ -3,6 +3,7 @@ import {
   deleteTask,
   dependentsOf,
   getTask,
+  listGroupsByProject,
   listResources,
   updateTask,
 } from "@/lib/db";
@@ -58,6 +59,14 @@ export async function PATCH(req: Request, { params }: Ctx) {
     resourceId = matched?.id ?? null;
   }
 
+  const groupId =
+    body?.groupId === null
+      ? null
+      : typeof body?.groupId === "number"
+        ? body.groupId
+        : undefined;
+  const newGroupName = typeof body?.newGroupName === "string" ? body.newGroupName.trim() || null : null;
+
   updateTask(id, {
     name,
     description: typeof body?.description === "string" ? body.description : existing.description,
@@ -66,11 +75,14 @@ export async function PATCH(req: Request, { params }: Ctx) {
     resourceId,
     startDateOverride,
     dependsOn,
+    groupId,
+    newGroupName,
   });
 
   return NextResponse.json({
     task: getTask(id),
     schedule: projectSchedule(existing.projectId),
+    groups: listGroupsByProject(existing.projectId),
   });
 }
 

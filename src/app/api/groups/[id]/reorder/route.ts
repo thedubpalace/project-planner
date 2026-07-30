@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getTask, moveTaskToGroup, updateTaskSortOrder } from "@/lib/db";
+import { getGroup, listGroupsByProject, updateGroupSortOrder } from "@/lib/db";
 import { projectSchedule } from "@/lib/service";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export async function POST(req: Request, { params }: Ctx) {
   const id = Number((await params).id);
-  const existing = getTask(id);
+  const existing = getGroup(id);
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const body = await req.json().catch(() => null);
@@ -17,16 +17,12 @@ export async function POST(req: Request, { params }: Ctx) {
   if (!Number.isFinite(sortOrder))
     return NextResponse.json({ error: "sortOrder must be a number" }, { status: 400 });
 
-  // groupId present (including null) => also move across groups/to standalone,
-  // same drag that changes both the task's cluster and its position in one go.
-  if (body?.groupId !== undefined) {
-    const groupId = body.groupId === null ? null : Number(body.groupId);
-    moveTaskToGroup(id, groupId);
-  }
-  updateTaskSortOrder(id, sortOrder);
-
+  updateGroupSortOrder(id, sortOrder);
+  // Every member task denormalizes the group's sort_order — refresh the
+  // schedule too so the frontend's task list re-sorts without a full reload.
   return NextResponse.json({
-    task: getTask(id),
+    group: getGroup(id),
+    groups: listGroupsByProject(existing.projectId),
     schedule: projectSchedule(existing.projectId),
   });
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { deleteProject, getProject, listResources, updateProject } from "@/lib/db";
+import { deleteProject, getProject, listGroupsByProject, listResources, updateProject } from "@/lib/db";
 import { projectSchedule } from "@/lib/service";
 
 export const runtime = "nodejs";
@@ -15,6 +15,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     project,
     schedule: projectSchedule(id),
     resources: listResources(),
+    groups: listGroupsByProject(id),
   });
 }
 

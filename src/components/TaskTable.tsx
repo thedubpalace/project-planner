@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/client";
-import type { ProjectSchedule, ScheduledTask } from "@/lib/types";
+import type { ProjectSchedule, ScheduledTask, TaskGroup } from "@/lib/types";
 import { groupTasks } from "@/lib/taskGroup";
 import {
   Button,
@@ -19,17 +19,21 @@ export function TaskTable({
   schedule,
   onEdit,
   onSchedule,
+  onGroupsChange,
   onAddTask,
 }: {
   schedule: ProjectSchedule;
   onEdit: (t: ScheduledTask) => void;
   onSchedule: (s: ProjectSchedule) => void;
+  onGroupsChange: (groups: TaskGroup[]) => void;
   onAddTask: () => void;
 }) {
   const toast = useToast();
   const [filter, setFilter] = useState<string | null>(null);
   const [atRiskOnly, setAtRiskOnly] = useState(false);
   const [confirm, setConfirm] = useState<{ task: ScheduledTask; deps: { id: number; name: string }[] } | null>(null);
+  const [renamingGroupId, setRenamingGroupId] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const tasks = schedule.tasks;
   const allSkills = [...new Set(tasks.flatMap((t) => t.skills))];
@@ -39,28 +43,36 @@ export function TaskTable({
     .filter((t) => !filter || t.skills.includes(filter))
     .filter((t) => !atRiskOnly || isAtRisk(t));
 
-  // Cluster same-group tasks together; groups themselves stay in roughly
-  // chronological order (by their earliest planned start).
+  // Cluster same-group tasks together; groups themselves stay in the manual
+  // order set by drag/reorder-buttons.
   const grouped = useMemo(() => groupTasks(shown), [shown]);
 
-  // Drag-reorder unit = one BA/Dev/QA cluster (dragged as a whole, since role
-  // order within a cluster is fixed) or one standalone task. Units are
-  // contiguous runs of `grouped` sharing the same base name.
+  // Drag/reorder-button unit = one whole group cluster (moved by its own
+  // task_groups.sort_order, independent of member tasks) or one standalone
+  // task (moved by its own sort_order). Units are contiguous runs of
+  // `grouped` sharing the same non-null groupId; every groupId-null item is
+  // always its own unit (never merged with an adjacent standalone task).
   const units = useMemo(() => {
-    const arr: { base: string; items: typeof grouped }[] = [];
+    const arr: { groupId: number | null; base: string; order: number; items: typeof grouped }[] = [];
     for (const g of grouped) {
       const last = arr[arr.length - 1];
-      if (last && last.base === g.base) last.items.push(g);
-      else arr.push({ base: g.base, items: [g] });
+      if (g.groupId != null && last && last.groupId === g.groupId) {
+        last.items.push(g);
+      } else {
+        const order = g.groupId != null ? g.t.groupSortOrder ?? g.groupId : g.t.sortOrder ?? g.t.id;
+        arr.push({ groupId: g.groupId, base: g.base, order, items: [g] });
+      }
     }
     return arr;
   }, [grouped]);
 
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [dropAt, setDropAt] = useState<{ idx: number; edge: "top" | "bottom" } | null>(null);
-
-  const minOrderOf = (items: typeof grouped) =>
-    Math.min(...items.map(({ t }) => t.sortOrder ?? t.id));
+  // Separate drag channel for moving one task at a time — within its group,
+  // across into a different group, onto a group header (append), or out to
+  // standalone (drop near any standalone row).
+  const [taskDragId, setTaskDragId] = useState<number | null>(null);
+  const [taskDropAt, setTaskDropAt] = useState<{ taskId: number; edge: "top" | "bottom" } | { groupId: number } | null>(null);
 
   const orderBetween = (before: number | null, after: number | null): number => {
     if (before == null && after == null) return 1;
@@ -69,29 +81,97 @@ export function TaskTable({
     return (before + after) / 2;
   };
 
-  const handleDrop = async (targetIdx: number, edge: "top" | "bottom") => {
-    setDropAt(null);
-    if (dragIdx === null) return;
+  // Whole-unit move: groups reorder via their own task_groups.sort_order
+  // (never touching member tasks' sort_order, which only matters for order
+  // *within* that group); standalone tasks reorder via their own sort_order,
+  // same as before groups existed.
+  const moveUnit = async (fromIdx: number, targetIdx: number, edge: "top" | "bottom") => {
     const dropIdx = edge === "top" ? targetIdx : targetIdx + 1;
-    if (dropIdx === dragIdx || dropIdx === dragIdx + 1) {
-      setDragIdx(null);
-      return; // dropped back onto its own slot — no-op
-    }
-    const orderVals = units.map((u) => minOrderOf(u.items));
-    const remaining = orderVals.filter((_, i) => i !== dragIdx);
-    const adjDrop = dropIdx > dragIdx ? dropIdx - 1 : dropIdx;
+    if (dropIdx === fromIdx || dropIdx === fromIdx + 1) return; // dropped back onto its own slot — no-op
+    const orderVals = units.map((u) => u.order);
+    const remaining = orderVals.filter((_, i) => i !== fromIdx);
+    const adjDrop = dropIdx > fromIdx ? dropIdx - 1 : dropIdx;
     const before = adjDrop > 0 ? remaining[adjDrop - 1] : null;
     const after = adjDrop < remaining.length ? remaining[adjDrop] : null;
     const newOrder = orderBetween(before, after);
 
-    const dragged = units[dragIdx];
-    setDragIdx(null);
+    const dragged = units[fromIdx];
     try {
-      let res;
-      for (const { t } of dragged.items) {
-        res = await api.reorderTask(t.id, newOrder);
+      if (dragged.groupId != null) {
+        const res = await api.reorderGroup(dragged.groupId, newOrder);
+        onSchedule(res.schedule);
+        onGroupsChange(res.groups);
+      } else {
+        const res = await api.reorderTask(dragged.items[0].t.id, newOrder, null);
+        onSchedule(res.schedule);
       }
-      if (res) onSchedule(res.schedule);
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
+  };
+
+  const handleDrop = (targetIdx: number, edge: "top" | "bottom") => {
+    setDropAt(null);
+    if (dragIdx === null) return;
+    const from = dragIdx;
+    setDragIdx(null);
+    moveUnit(from, targetIdx, edge);
+  };
+
+  // Single-task move: joins whichever group the drop target belongs to (or
+  // stays/becomes standalone if the target has no group), positioned right
+  // at that target's edge among its siblings.
+  const moveTaskTo = async (taskId: number, targetGroupId: number | null, targetTaskId: number | null, edge: "top" | "bottom") => {
+    const siblings = tasks
+      .filter((x) => x.groupId === targetGroupId && x.id !== taskId)
+      .sort((a, b) => (a.sortOrder ?? a.id) - (b.sortOrder ?? b.id));
+    let before: number | null = null;
+    let after: number | null = null;
+    if (targetTaskId == null) {
+      // dropped on the group header — append to the end of that group
+      const last = siblings[siblings.length - 1];
+      before = last ? last.sortOrder ?? last.id : null;
+    } else {
+      const idx = siblings.findIndex((x) => x.id === targetTaskId);
+      const insertAt = edge === "top" ? idx : idx + 1;
+      before = insertAt > 0 ? siblings[insertAt - 1].sortOrder ?? siblings[insertAt - 1].id : null;
+      after = insertAt < siblings.length ? siblings[insertAt].sortOrder ?? siblings[insertAt].id : null;
+    }
+    const newOrder = orderBetween(before, after);
+    try {
+      const res = await api.reorderTask(taskId, newOrder, targetGroupId);
+      onSchedule(res.schedule);
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
+  };
+
+  const handleTaskDrop = () => {
+    const drop = taskDropAt;
+    setTaskDropAt(null);
+    if (taskDragId == null || !drop) return;
+    const id = taskDragId;
+    setTaskDragId(null);
+    if ("groupId" in drop) moveTaskTo(id, drop.groupId, null, "top");
+    else {
+      const target = tasks.find((x) => x.id === drop.taskId);
+      if (target && target.id !== id) moveTaskTo(id, target.groupId, target.id, drop.edge);
+    }
+  };
+
+  const startRenameGroup = (g: { id: number; base: string }) => {
+    setRenamingGroupId(g.id);
+    setRenameValue(g.base);
+  };
+  const commitRenameGroup = async () => {
+    const id = renamingGroupId;
+    const name = renameValue.trim();
+    setRenamingGroupId(null);
+    if (id == null || !name) return;
+    try {
+      const res = await api.renameGroup(id, name);
+      onSchedule(res.schedule);
+      onGroupsChange(res.groups);
     } catch (e) {
       toast((e as Error).message, "error");
     }
@@ -270,22 +350,36 @@ export function TaskTable({
                 ...(dropTop ? { boxShadow: "inset 0 2px 0 var(--accent)" } : {}),
                 ...(dropBottom ? { boxShadow: "inset 0 -2px 0 var(--accent)" } : {}),
               };
-              const rowDragProps = {
+              // Group header: draggable as a whole unit, AND a drop target
+              // for an individual task being dragged in from elsewhere.
+              const headerDragProps = {
                 onDragOver: (e: React.DragEvent) => {
                   e.preventDefault();
+                  if (taskDragId != null) {
+                    if (unit.groupId != null) setTaskDropAt({ groupId: unit.groupId });
+                    return;
+                  }
                   if (dragIdx === null) return;
                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                   const edge: "top" | "bottom" = e.clientY - rect.top < rect.height / 2 ? "top" : "bottom";
                   setDropAt({ idx: uIdx, edge });
                 },
-                onDragLeave: () => setDropAt((d) => (d?.idx === uIdx ? null : d)),
+                onDragLeave: () => {
+                  setDropAt((d) => (d?.idx === uIdx ? null : d));
+                  setTaskDropAt((d) => (d && "groupId" in d && d.groupId === unit.groupId ? null : d));
+                },
                 onDrop: (e: React.DragEvent) => {
                   e.preventDefault();
+                  if (taskDragId != null) {
+                    handleTaskDrop();
+                    return;
+                  }
                   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                   const edge: "top" | "bottom" = e.clientY - rect.top < rect.height / 2 ? "top" : "bottom";
                   handleDrop(uIdx, edge);
                 },
               };
+              const groupDropActive = taskDropAt != null && "groupId" in taskDropAt && taskDropAt.groupId === unit.groupId;
               const handle = (
                 <span
                   draggable
@@ -304,37 +398,123 @@ export function TaskTable({
               );
               return (
                 <Fragment key={unit.items[0].t.id}>
-                  {unit.items[0].suffix && (
-                    <tr {...rowDragProps} style={{ opacity: isDragging ? 0.4 : 1, ...dropBorderStyle }}>
+                  {unit.groupId != null && (
+                    <tr
+                      {...headerDragProps}
+                      style={{ opacity: isDragging ? 0.4 : 1, ...dropBorderStyle, ...(groupDropActive ? { boxShadow: "inset 0 0 0 2px var(--accent)" } : {}) }}
+                    >
                       <td
                         colSpan={8}
                         className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.04em]"
                         style={{ color: "var(--text-muted)", background: "var(--bg-surface-hi)" }}
                       >
-                        {handle}
-                        {unit.base}
+                        <span className="inline-flex items-center gap-1">
+                          {handle}
+                          {renamingGroupId === unit.groupId ? (
+                            <input
+                              autoFocus
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              onBlur={commitRenameGroup}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") commitRenameGroup();
+                                if (e.key === "Escape") setRenamingGroupId(null);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="!h-5 !py-0 !text-[10px] !w-40"
+                            />
+                          ) : (
+                            <button
+                              className="cursor-pointer hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startRenameGroup({ id: unit.groupId!, base: unit.base });
+                              }}
+                              title="Rename group"
+                            >
+                              {unit.base}
+                            </button>
+                          )}
+                          <span className="inline-flex items-center ml-1">
+                            <button
+                              className="cursor-pointer px-1 disabled:opacity-30 disabled:cursor-not-allowed"
+                              disabled={uIdx === 0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                moveUnit(uIdx, uIdx - 1, "top");
+                              }}
+                              title="Move group up"
+                            >
+                              ▲
+                            </button>
+                            <button
+                              className="cursor-pointer px-1 disabled:opacity-30 disabled:cursor-not-allowed"
+                              disabled={uIdx === units.length - 1}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                moveUnit(uIdx, uIdx + 1, "bottom");
+                              }}
+                              title="Move group down"
+                            >
+                              ▼
+                            </button>
+                          </span>
+                        </span>
                       </td>
                     </tr>
                   )}
                   {unit.items.map(({ t, suffix }) => {
-                    const standalone = unit.items.length === 1 && !suffix;
+                    const taskDropTop = taskDropAt != null && "taskId" in taskDropAt && taskDropAt.taskId === t.id && taskDropAt.edge === "top";
+                    const taskDropBottom = taskDropAt != null && "taskId" in taskDropAt && taskDropAt.taskId === t.id && taskDropAt.edge === "bottom";
+                    const taskRowDragProps = {
+                      onDragOver: (e: React.DragEvent) => {
+                        e.preventDefault();
+                        if (taskDragId == null || taskDragId === t.id) return;
+                        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                        const edge: "top" | "bottom" = e.clientY - rect.top < rect.height / 2 ? "top" : "bottom";
+                        setTaskDropAt({ taskId: t.id, edge });
+                      },
+                      onDragLeave: () =>
+                        setTaskDropAt((d) => (d && "taskId" in d && d.taskId === t.id ? null : d)),
+                      onDrop: (e: React.DragEvent) => {
+                        e.preventDefault();
+                        handleTaskDrop();
+                      },
+                    };
                     return (
                   <tr
                     key={t.id}
                     className="border-t group hover:bg-[var(--bg-surface-hi)]"
                     style={{
                       borderColor: "var(--border-divider)",
-                      opacity: standalone && isDragging ? 0.4 : 1,
-                      ...(standalone ? dropBorderStyle : {}),
+                      opacity: taskDragId === t.id ? 0.4 : 1,
+                      ...(taskDropTop ? { boxShadow: "inset 0 2px 0 var(--accent)" } : {}),
+                      ...(taskDropBottom ? { boxShadow: "inset 0 -2px 0 var(--accent)" } : {}),
                     }}
-                    {...(standalone ? rowDragProps : {})}
+                    {...taskRowDragProps}
                   >
                 <td
                   className={`py-2.5 text-[13px] cursor-pointer ${suffix ? "pl-6 pr-3" : "px-3"}`}
                   style={{ color: "var(--text-primary)" }}
                   onClick={() => onEdit(t)}
                 >
-                  {standalone && handle}
+                  <span
+                    draggable
+                    onDragStart={(e) => {
+                      e.stopPropagation();
+                      setTaskDragId(t.id);
+                    }}
+                    onDragEnd={() => {
+                      setTaskDragId(null);
+                      setTaskDropAt(null);
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-block mr-2 cursor-grab active:cursor-grabbing select-none opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ color: "var(--text-muted)" }}
+                    title="Drag to reorder — drop on another task to join its group, or on a group header to append"
+                  >
+                    ⠿
+                  </span>
                   {suffix ? suffix : t.name}
                 </td>
                 <td className="px-3 py-2.5">

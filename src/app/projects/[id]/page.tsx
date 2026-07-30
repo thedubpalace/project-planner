@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/client";
-import type { Project, ProjectSchedule, ResourceLoad, ScheduledTask } from "@/lib/types";
+import type { Project, ProjectSchedule, ResourceLoad, ScheduledTask, TaskGroup } from "@/lib/types";
 import {
   Button,
   SkillChip,
@@ -32,6 +32,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   const [project, setProject] = useState<Project | null>(null);
   const [schedule, setSchedule] = useState<ProjectSchedule | null>(null);
   const [resources, setResources] = useState<ResourceLoad[]>([]);
+  const [groups, setGroups] = useState<TaskGroup[]>([]);
   const [tab, setTab] = useState<Tab>("timeline");
   const [notFound, setNotFound] = useState(false);
 
@@ -45,6 +46,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
       setProject(proj.project);
       setSchedule(proj.schedule);
       setResources(res);
+      setGroups(proj.groups);
     } catch {
       setNotFound(true);
     }
@@ -66,6 +68,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     setSchedule(s);
     api.resources().then(setResources).catch(() => {});
   };
+  const afterGroupsChanged = (g: TaskGroup[]) => setGroups(g);
 
   if (notFound)
     return (
@@ -207,7 +210,13 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
         )}
         {tab === "tasks" && (
           <div className="px-4 sm:px-8">
-            <TaskTable schedule={schedule} onEdit={openEditTask} onSchedule={setSchedule} onAddTask={openNewTask} />
+            <TaskTable
+              schedule={schedule}
+              onEdit={openEditTask}
+              onSchedule={setSchedule}
+              onGroupsChange={setGroups}
+              onAddTask={openNewTask}
+            />
           </div>
         )}
         {tab === "resources" && (
@@ -223,8 +232,10 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
         projectId={projectId}
         tasks={schedule.tasks}
         resources={resources}
+        groups={groups}
         existing={editingTask}
         onSaved={afterTaskSaved}
+        onGroupsChange={afterGroupsChanged}
       />
       <ProjectForm
         open={projFormOpen}

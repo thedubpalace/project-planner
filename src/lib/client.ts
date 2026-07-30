@@ -7,6 +7,7 @@ import type {
   ResourceLoad,
   ScheduledTask,
   Task,
+  TaskGroup,
   TaskStatus,
 } from "./types";
 
@@ -18,6 +19,7 @@ export type {
   ResourceLoad,
   ScheduledTask,
   Task,
+  TaskGroup,
   TaskStatus,
 };
 
@@ -56,7 +58,7 @@ export const api = {
   createProject: (name: string, deadline: string) =>
     req<Project>("/api/projects", { method: "POST", body: JSON.stringify({ name, deadline }) }),
   getProject: (id: number) =>
-    req<{ project: Project; schedule: ProjectSchedule; resources: Resource[] }>(
+    req<{ project: Project; schedule: ProjectSchedule; resources: Resource[]; groups: TaskGroup[] }>(
       `/api/projects/${id}`,
     ),
   updateProject: (id: number, name: string, deadline: string) =>
@@ -82,12 +84,12 @@ export const api = {
   deleteResource: (id: number) => req(`/api/resources/${id}`, { method: "DELETE" }),
 
   createTask: (input: TaskCreateInput) =>
-    req<{ task: Task; schedule: ProjectSchedule }>("/api/tasks", {
+    req<{ task: Task; schedule: ProjectSchedule; groups: TaskGroup[] }>("/api/tasks", {
       method: "POST",
       body: JSON.stringify(input),
     }),
   updateTask: (id: number, input: TaskUpdateInput) =>
-    req<{ task: Task; schedule: ProjectSchedule }>(`/api/tasks/${id}`, {
+    req<{ task: Task; schedule: ProjectSchedule; groups: TaskGroup[] }>(`/api/tasks/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),
     }),
@@ -101,11 +103,24 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ progress, status, actualEnd }),
     }),
-  reorderTask: (id: number, sortOrder: number) =>
+  reorderTask: (id: number, sortOrder: number, groupId?: number | null) =>
     req<{ task: Task; schedule: ProjectSchedule }>(`/api/tasks/${id}/reorder`, {
+      method: "POST",
+      body: JSON.stringify(groupId !== undefined ? { sortOrder, groupId } : { sortOrder }),
+    }),
+
+  renameGroup: (id: number, name: string) =>
+    req<{ group: TaskGroup; groups: TaskGroup[]; schedule: ProjectSchedule }>(`/api/groups/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+  reorderGroup: (id: number, sortOrder: number) =>
+    req<{ group: TaskGroup; groups: TaskGroup[]; schedule: ProjectSchedule }>(`/api/groups/${id}/reorder`, {
       method: "POST",
       body: JSON.stringify({ sortOrder }),
     }),
+  deleteGroup: (id: number) =>
+    req<{ ok: boolean; groups: TaskGroup[]; schedule: ProjectSchedule }>(`/api/groups/${id}`, { method: "DELETE" }),
 };
 
 export interface TaskCreateInput {
@@ -117,6 +132,8 @@ export interface TaskCreateInput {
   resourceId?: number | null;
   startDateOverride?: string | null;
   dependsOn?: number[];
+  groupId?: number | null;
+  newGroupName?: string | null;
 }
 
 export type TaskUpdateInput = Partial<Omit<TaskCreateInput, "projectId" | "resourceId">> & {

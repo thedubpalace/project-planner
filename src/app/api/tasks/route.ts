@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createTask, listResources } from "@/lib/db";
+import { createTask, listGroupsByProject, listResources } from "@/lib/db";
 import { autoMatch } from "@/lib/schedule";
 import { bookedHoursByResource, projectSchedule } from "@/lib/service";
 
@@ -38,6 +38,8 @@ export async function POST(req: Request) {
     typeof body?.startDateOverride === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.startDateOverride)
       ? body.startDateOverride
       : null;
+  const groupId = typeof body?.groupId === "number" ? body.groupId : null;
+  const newGroupName = typeof body?.newGroupName === "string" ? body.newGroupName.trim() : null;
 
   const task = createTask({
     projectId,
@@ -48,10 +50,12 @@ export async function POST(req: Request) {
     resourceId,
     startDateOverride,
     dependsOn,
+    groupId,
+    newGroupName: newGroupName || null,
   });
 
   return NextResponse.json(
-    { task, schedule: projectSchedule(projectId) },
+    { task, schedule: projectSchedule(projectId), groups: listGroupsByProject(projectId) },
     { status: 201 },
   );
 }

@@ -6,7 +6,7 @@ import { ProgressSlider, Segmented } from "./TaskTable";
 import { TagInput } from "./TagInput";
 import { api } from "@/lib/client";
 import { rankCandidates } from "@/lib/schedule";
-import type { ProjectSchedule, Resource, ResourceLoad, ScheduledTask } from "@/lib/types";
+import type { ProjectSchedule, Resource, ResourceLoad, ScheduledTask, TaskGroup } from "@/lib/types";
 
 export function TaskDrawer({
   open,
@@ -14,16 +14,20 @@ export function TaskDrawer({
   projectId,
   tasks,
   resources,
+  groups,
   existing,
   onSaved,
+  onGroupsChange,
 }: {
   open: boolean;
   onClose: () => void;
   projectId: number;
   tasks: ScheduledTask[];
   resources: ResourceLoad[];
+  groups: TaskGroup[];
   existing?: ScheduledTask | null;
   onSaved: (schedule: ProjectSchedule) => void;
+  onGroupsChange?: (groups: TaskGroup[]) => void;
 }) {
   const toast = useToast();
   const [name, setName] = useState("");
@@ -37,6 +41,8 @@ export function TaskDrawer({
   const [busy, setBusy] = useState(false);
   const [progress, setProgressState] = useState(0);
   const [actualEnd, setActualEndState] = useState("");
+  const [groupId, setGroupId] = useState<number | null>(null);
+  const [newGroupName, setNewGroupName] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -50,6 +56,8 @@ export function TaskDrawer({
     setShowPicker(false);
     setProgressState(existing?.progress ?? 0);
     setActualEndState(existing?.actualEnd ?? "");
+    setGroupId(existing?.groupId ?? null);
+    setNewGroupName("");
   }, [open, existing]);
 
   // Progress/status commit immediately (mirrors the inline table control)
@@ -125,6 +133,10 @@ export function TaskDrawer({
         skills,
         dependsOn: deps,
         startDateOverride: startOverride || null,
+        // a typed new-group name always wins server-side; groupId alone
+        // covers "join existing" and "ungroup" (explicit null)
+        groupId: newGroupName.trim() ? undefined : groupId,
+        newGroupName: newGroupName.trim() || undefined,
       };
       let schedule: ProjectSchedule;
       let assignedName: string | null;
@@ -138,6 +150,7 @@ export function TaskDrawer({
         assignedName = res.task.resourceId
           ? resources.find((r) => r.id === res.task.resourceId)?.name ?? null
           : null;
+        onGroupsChange?.(res.groups);
       } else {
         const res = await api.createTask({
           projectId,
@@ -148,6 +161,7 @@ export function TaskDrawer({
         assignedName = res.task.resourceId
           ? resources.find((r) => r.id === res.task.resourceId)?.name ?? null
           : null;
+        onGroupsChange?.(res.groups);
       }
       toast(
         assignedName
@@ -210,6 +224,21 @@ export function TaskDrawer({
               hours
             </span>
           </div>
+        </Field>
+        <Field label="Group" hint="Clusters this task with others under a shared header in the Task Table and Timeline.">
+          <GroupSelect
+            groups={groups}
+            groupId={groupId}
+            newGroupName={newGroupName}
+            onPick={(id) => {
+              setGroupId(id);
+              setNewGroupName("");
+            }}
+            onTypeNew={(v) => {
+              setNewGroupName(v);
+              setGroupId(null);
+            }}
+          />
         </Field>
         <Field label="Required skill tags" hint="Drives auto-matching. At least one tag to get a suggestion.">
           <TagInput value={skills} onChange={setSkills} suggestions={skillSuggestions} />
@@ -395,6 +424,76 @@ function PickRow({
         {Math.round(booked)}h booked
       </span>
     </button>
+  );
+}
+
+function GroupSelect({
+  groups,
+  groupId,
+  newGroupName,
+  onPick,
+  onTypeNew,
+}: {
+  groups: TaskGroup[];
+  groupId: number | null;
+  newGroupName: string;
+  onPick: (id: number | null) => void;
+  onTypeNew: (name: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = groups.find((g) => g.id === groupId);
+  const label = newGroupName.trim() ? `New group: "${newGroupName.trim()}"` : selected ? selected.name : "No group (standalone)";
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="w-full text-left px-3 py-2 rounded-md border text-[13px] cursor-pointer"
+        style={{ borderColor: "var(--border-default)", background: "var(--bg-base)", color: "var(--text-secondary)" }}
+      >
+        {label}
+      </button>
+      {open && (
+        <div
+          className="absolute left-0 right-0 top-full mt-1 z-20 rounded-md border max-h-52 overflow-auto"
+          style={{ background: "var(--bg-surface-hi)", borderColor: "var(--border-default)" }}
+        >
+          <button
+            type="button"
+            className="w-full text-left text-[12px] px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-surface)]"
+            style={{ color: "var(--text-secondary)" }}
+            onClick={() => {
+              onPick(null);
+              setOpen(false);
+            }}
+          >
+            No group (standalone)
+          </button>
+          {groups.map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              className="w-full text-left text-[12px] px-3 py-1.5 cursor-pointer hover:bg-[var(--bg-surface)]"
+              style={{ color: "var(--text-primary)" }}
+              onClick={() => {
+                onPick(g.id);
+                setOpen(false);
+              }}
+            >
+              {g.name}
+            </button>
+          ))}
+          <div className="border-t p-2" style={{ borderColor: "var(--border-divider)" }}>
+            <input
+              value={newGroupName}
+              onChange={(e) => onTypeNew(e.target.value)}
+              placeholder="Or type a new group name…"
+              className="!text-[12px]"
+            />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

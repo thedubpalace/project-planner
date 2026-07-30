@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, type DashboardProject } from "@/lib/client";
-import type { ResourceLoad, ScheduledTask } from "@/lib/types";
+import type { ResourceLoad, ScheduledTask, TaskGroup } from "@/lib/types";
 import { PortfolioGantt } from "@/components/PortfolioGantt";
 import { TaskDrawer } from "@/components/TaskDrawer";
 
@@ -16,6 +16,15 @@ export default function Portfolio() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerProjectId, setDrawerProjectId] = useState<number | null>(null);
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
+  const [drawerGroups, setDrawerGroups] = useState<TaskGroup[]>([]);
+
+  useEffect(() => {
+    if (drawerProjectId == null) return;
+    api
+      .getProject(drawerProjectId)
+      .then((p) => setDrawerGroups(p.groups))
+      .catch(() => setDrawerGroups([]));
+  }, [drawerProjectId]);
 
   const load = useCallback(async () => {
     const [p, r] = await Promise.all([api.dashboard(), api.resources()]);
@@ -120,8 +129,10 @@ export default function Portfolio() {
           projectId={activeProject.id}
           tasks={activeProject.schedule.tasks}
           resources={resources}
+          groups={drawerGroups}
           existing={editingTask}
           onSaved={load}
+          onGroupsChange={setDrawerGroups}
         />
       )}
     </div>
