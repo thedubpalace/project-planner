@@ -152,17 +152,30 @@ export function computeTaskSchedule(input: ScheduleInput): Map<number, Scheduled
     // its actual completion date, not this comparison.
     const expectedPct =
       asOf <= plannedStart ? 0 : asOf >= plannedEnd ? 100 : Math.min(100, Math.round((businessDaysInclusive(plannedStart, asOf) / dur) * 100));
-    const behindPace = t.status !== "done" && t.progress < expectedPct;
+    // A small shortfall against expected pace is normal reporting noise, not
+    // a real risk signal — only flag once the gap exceeds a threshold.
+    // Shorter tasks get a wider band (a 1-day task is all-or-nothing; a
+    // 20+ day task is held to a tighter 5-point margin).
+    const behindPaceThreshold = Math.max(5, Math.round(100 / dur));
+    const behindPace = t.status !== "done" && expectedPct - t.progress > behindPaceThreshold;
 
     // Forecast: at the current rate, when would this task actually finish?
-    // Linear extrapolation from elapsed-days-vs-progress-so-far. A task with
-    // 0% logged yet has no rate to extrapolate — fall back to "as if it
-    // started today and took the full planned duration."
+    // A task with 0% logged yet has no rate to extrapolate — fall back to
+    // "as if it started today and took the full planned duration."
     let forecastEnd: string | null = null;
     if (behindPace) {
       if (t.progress > 0) {
+        // Blend the whole-life observed rate with "back on the original
+        // planned pace from here," weighted by how much of the plan has
+        // actually elapsed. Early in a task, a noisy day-1 rate is barely
+        // trusted; late in a task, the observed rate dominates. Without
+        // this, 1 elapsed day + 1% progress on a 20-day task would
+        // extrapolate to ~99 remaining days instead of something sane.
         const elapsedDays = businessDaysInclusive(plannedStart, asOf);
-        const remainingDays = Math.max(1, Math.ceil((elapsedDays * (100 - t.progress)) / t.progress));
+        const elapsedFrac = Math.min(1, elapsedDays / dur);
+        const observedRemaining = (elapsedDays * (100 - t.progress)) / t.progress;
+        const plannedRemaining = dur - elapsedDays; // "back on plan from today" — its weight is 0 once elapsedFrac hits 1, so going negative here (already past the planned window) is harmless
+        const remainingDays = Math.max(1, Math.ceil(elapsedFrac * observedRemaining + (1 - elapsedFrac) * plannedRemaining));
         forecastEnd = toISO(addBusinessDays(asOf, remainingDays - 1));
       } else {
         forecastEnd = toISO(addBusinessDays(asOf, dur - 1));
