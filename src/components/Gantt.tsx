@@ -7,7 +7,7 @@ import type { ProjectSchedule, ResourceLoad, ScheduledTask } from "@/lib/types";
 import { businessDaysInclusive, toISO } from "@/lib/schedule";
 import { buildDependencyPath } from "@/lib/ganttConnector";
 import { groupTasks } from "@/lib/taskGroup";
-import { Button, StatusPill, fmtDate, taskPill, useToast } from "./ui";
+import { Button, ProgressBar, SkillChip, StatusPill, fmtDate, taskPill, useToast } from "./ui";
 
 const ROW_H = 32;
 const HEADER_H = 20;
@@ -59,6 +59,9 @@ export function Gantt({
   const [drag, setDrag] = useState<DragState | null>(null);
   const [pendingConfirm, setPendingConfirm] = useState<PendingCommit | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [hover, setHover] = useState<{ taskId: number; x: number; y: number } | null>(null);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // detect shifted bars → pulse
   useEffect(() => {
@@ -152,9 +155,52 @@ export function Gantt({
   // on mobile too — touch-action: none on the handle elements themselves
   // stops the browser's pan/scroll gesture from hijacking the drag, while
   // the rest of the grid still scrolls normally by touch.
+  const clearHoverTimer = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  };
+
+  // Hover is resolved from pointer coordinates against the same bar geometry
+  // the bars are drawn from, rather than a DOM overlay — an overlay sitting
+  // above the resize/move handles to catch hover would also steal their
+  // pointerdown, breaking drag.
+  const onGridPointerMove = (e: React.PointerEvent) => {
+    if (drag) return;
+    const rect = bodyRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const lx = e.clientX - rect.left;
+    const ly = e.clientY - rect.top;
+    const row = model.rows.find((r) => r.kind === "task" && ly >= r.top && ly < r.top + r.height);
+    const b = row?.task ? model.bars.get(row.task.id) : undefined;
+    const ext = b ? barExtent(b) : null;
+    const targetId = ext && lx >= ext.left && lx <= ext.right ? row!.task!.id : null;
+    if (targetId == null) {
+      clearHoverTimer();
+      setHover(null);
+      return;
+    }
+    if (hover?.taskId === targetId) {
+      setHover({ taskId: targetId, x: e.clientX, y: e.clientY });
+      return;
+    }
+    clearHoverTimer();
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    hoverTimerRef.current = setTimeout(() => setHover({ taskId: targetId, x: clientX, y: clientY }), 200);
+  };
+
+  const onGridPointerLeave = () => {
+    clearHoverTimer();
+    setHover(null);
+  };
+
   const beginDrag = (e: React.PointerEvent<HTMLElement>, mode: DragMode) => {
     e.preventDefault();
     e.stopPropagation();
+    clearHoverTimer();
+    setHover(null);
     const taskId = Number(e.currentTarget.dataset.taskId);
     const state: DragState = { taskId, mode, startClientX: e.clientX, deltaDays: 0, pointerId: e.pointerId };
     dragRef.current = state;
@@ -371,7 +417,12 @@ export function Gantt({
             </div>
 
             {/* body */}
-            <div style={{ position: "relative", height: model.totalHeight }}>
+            <div
+              ref={bodyRef}
+              style={{ position: "relative", height: model.totalHeight }}
+              onPointerMove={onGridPointerMove}
+              onPointerLeave={onGridPointerLeave}
+            >
               {/* column backgrounds */}
               <div className="absolute inset-0 flex pointer-events-none">
                 {model.columns.map((c, i) => (
@@ -474,7 +525,6 @@ export function Gantt({
                       role="button"
                       aria-label={`Move ${t.name} — use arrow keys to shift by day`}
                       onKeyDown={(e) => onHandleKeyDown(e, t.id, "move")}
-                      title="Drag to move (or focus + arrow keys) — drag the edges to resize"
                     />
                     {/* resize handles — hit area wider than the visible edge
                         (touch targets need more than a few px to be reliable) */}
@@ -505,7 +555,6 @@ export function Gantt({
                           zIndex: 6,
                           pointerEvents: "none",
                         }}
-                        title={b.aria}
                         aria-label={b.aria}
                       >
                         {fgWidth >= 60 && (
@@ -576,7 +625,6 @@ export function Gantt({
                           zIndex: 4,
                           pointerEvents: "none",
                         }}
-                        title={`Forecast: at current pace, finishes ${fmtDate(t.forecastEnd, false)}`}
                       />
                     )}
                     {b.forecastGhost && (
@@ -592,9 +640,39 @@ export function Gantt({
                           zIndex: 4,
                           pointerEvents: "none",
                         }}
-                        title={`Forecast shift: ${fmtDate(t.forecastStart, false)} – ${fmtDate(t.forecastEnd, false)}`}
                       />
                     )}
+                    {/* task name — the left pane's name column is always
+                        visible too, but labeling the bar itself keeps the
+                        name in view without eye travel back to the frozen
+                        column when scanning a dense chart row by row.
+                        Sits flush right after the bar normally; only steps
+                        out past connectorClearX when this task's outgoing
+                        connector jog genuinely reaches beyond the bar's own
+                        edge (a wide overrun/forecast tail already clears the
+                        jog on its own — a real connector's stub covered by
+                        the bar itself shouldn't push the label out too). */}
+                    <span
+                      className="absolute text-[11px] truncate pointer-events-none"
+                      style={{
+                        left: Math.max(
+                          ghostLeft + ghostWidth,
+                          overrunLeft + overrunWidth,
+                          b.forecastOverrun ? b.forecastOverrun.left + b.forecastOverrun.width : 0,
+                          b.forecastGhost ? b.forecastGhost.left + b.forecastGhost.width : 0,
+                          (model.connectorClearX.get(t.id) ?? 0) + 4,
+                        ),
+                        top: 0,
+                        height: ROW_H,
+                        lineHeight: `${ROW_H}px`,
+                        maxWidth: 200,
+                        padding: "0 3px 0 6px",
+                        color: "var(--text-secondary)",
+                        zIndex: 8,
+                      }}
+                    >
+                      {row.suffix ?? t.name}
+                    </span>
                     {/* aria for not-started (planned only) */}
                     {!b.fg && <span className="sr-only">{b.aria}</span>}
                   </div>
@@ -604,6 +682,13 @@ export function Gantt({
           </div>
         </div>
       </div>
+
+      {/* hover tooltip — quick-glance task detail without opening the drawer */}
+      {hover &&
+        (() => {
+          const t = tasks.find((x) => x.id === hover.taskId);
+          return t ? <GanttTooltip task={t} x={hover.x} y={hover.y} /> : null;
+        })()}
 
       {/* confirm dialog — dragging a task that's already marked done */}
       {pendingConfirm && (
@@ -702,6 +787,68 @@ function Marker({ x, height, color, label, labelColor, dashed }: { x: number; he
   );
 }
 
+function GanttTooltip({ task: t, x, y }: { task: ScheduledTask; x: number; y: number }) {
+  const above = y > 240;
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+  const left = Math.min(Math.max(x, 132), vw - 132);
+  return (
+    <div
+      className="fixed fade-in"
+      style={{
+        left,
+        top: above ? y - 16 : y + 20,
+        transform: above ? "translate(-50%, -100%)" : "translate(-50%, 0)",
+        zIndex: 40,
+        pointerEvents: "none",
+        width: 248,
+      }}
+    >
+      <div
+        className="rounded-lg border p-3 flex flex-col gap-2"
+        style={{ background: "var(--bg-modal)", borderColor: "var(--border-default)", boxShadow: "var(--shadow-card)" }}
+      >
+        {t.groupName && (
+          <span className="text-[10px] font-semibold uppercase tracking-[0.03em]" style={{ color: "var(--text-muted)" }}>
+            {t.groupName}
+          </span>
+        )}
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-[13px] font-medium leading-tight" style={{ color: "var(--text-primary)" }}>
+            {t.name}
+          </span>
+          <StatusPill variant={taskPill(t.status, t.isUnassigned, t.overDeadline, t.behindPace)} />
+        </div>
+        <div className="text-[11px] mono" style={{ color: "var(--text-secondary)" }}>
+          {fmtDate(t.plannedStart, false)} – {fmtDate(t.effectiveEnd, false)} · {t.durationDays}d
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {t.isUnassigned ? (
+            <span className="text-[11px]" style={{ color: "var(--status-danger-text)" }}>
+              ⚠ Unassigned
+            </span>
+          ) : (
+            <span className="text-[11px]" style={{ color: "var(--text-secondary)" }}>
+              {t.resourceName}
+            </span>
+          )}
+          {t.skills.map((s) => (
+            <SkillChip key={s} tag={s} />
+          ))}
+        </div>
+        <ProgressBar pct={t.progress} width={140} />
+        {t.forecastEnd && (
+          <div className="text-[11px] mono" style={{ color: "var(--gantt-forecast-border)" }}>
+            Forecast: {fmtDate(t.forecastStart, false)} – {fmtDate(t.forecastEnd, false)}
+          </div>
+        )}
+        <div className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+          {t.status === "done" ? "Drag handle to adjust actual completion" : "Drag to move · drag edges to resize"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Initials({ name }: { name: string }) {
   const i = name.split(" ").map((w) => w[0]).join("").slice(0, 2).toUpperCase();
   return (
@@ -750,9 +897,24 @@ interface Model {
   bars: Map<number, Bar>;
   depLines: string[];
   forecastDepLines: string[];
+  connectorClearX: Map<number, number>; // task id -> rightmost x its outgoing connector's jog reaches
   todayX: number | null;
   deadlineX: number | null;
   totalHeight: number;
+}
+
+// Full pixel span a bar visually occupies, including any overrun/forecast
+// tails that extend past the planned width — used for hover hit-testing.
+function barExtent(b: Bar): { left: number; right: number } {
+  let left = b.left;
+  let right = b.left + b.plannedWidth;
+  if (b.overrun) right = Math.max(right, b.overrun.left + b.overrun.width);
+  if (b.forecastOverrun) right = Math.max(right, b.forecastOverrun.left + b.forecastOverrun.width);
+  if (b.forecastGhost) {
+    left = Math.min(left, b.forecastGhost.left);
+    right = Math.max(right, b.forecastGhost.left + b.forecastGhost.width);
+  }
+  return { left, right };
 }
 
 function buildModel(schedule: ProjectSchedule): Model {
@@ -872,6 +1034,17 @@ function buildModel(schedule: ProjectSchedule): Model {
     bars.set(t.id, { top: row.top, left, plannedWidth, fg, overrun, ring: t.overDeadline, aria, forecastOverrun, forecastGhost });
   }
 
+  // How far right each predecessor's outgoing connector actually reaches
+  // before it turns (buildDependencyPath's 8px jog) — the name label only
+  // needs to step around it when that reach extends past the label's own
+  // anchor; a predecessor with a wide overrun/forecast tail already clears
+  // the jog on its own; a short/on-time bar doesn't.
+  const connectorClearX = new Map<number, number>();
+  const noteConnectorClear = (id: number, x1: number) => {
+    const clear = x1 + 8;
+    if ((connectorClearX.get(id) ?? -Infinity) < clear) connectorClearX.set(id, clear);
+  };
+
   // dependency elbow lines
   const depLines: string[] = [];
   for (const t of tasks) {
@@ -885,6 +1058,7 @@ function buildModel(schedule: ProjectSchedule): Model {
       const y1 = predBar.top + ROW_H / 2;
       const x2 = succBar.left;
       depLines.push(buildDependencyPath(x1, y1, x2, y2));
+      noteConnectorClear(depId, x1);
     }
   }
 
@@ -913,6 +1087,7 @@ function buildModel(schedule: ProjectSchedule): Model {
           : succBar.left; // no forecast at all: land on its planned bar
       const y1 = predBar.top + ROW_H / 2;
       forecastDepLines.push(buildDependencyPath(predForecastRight, y1, succForecastLeft, y2));
+      noteConnectorClear(depId, predForecastRight);
     }
   }
 
@@ -928,6 +1103,7 @@ function buildModel(schedule: ProjectSchedule): Model {
     bars,
     depLines,
     forecastDepLines,
+    connectorClearX,
     todayX: todayX >= 0 && todayX <= gridWidth ? todayX : null,
     deadlineX: deadlineX >= 0 && deadlineX <= gridWidth ? deadlineX : null,
     totalHeight,
