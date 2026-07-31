@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button, Drawer, Field, SkillChip, StatusPill, WorkloadBar, fmtShifted, taskPill, useToast } from "./ui";
 import { ProgressSlider, Segmented } from "./TaskTable";
 import { TagInput } from "./TagInput";
 import { api } from "@/lib/client";
 import { rankCandidates } from "@/lib/schedule";
+import { groupTasks } from "@/lib/taskGroup";
 import type { ProjectSchedule, Resource, ResourceLoad, ScheduledTask, TaskGroup } from "@/lib/types";
 
 export function TaskDrawer({
@@ -244,7 +245,7 @@ export function TaskDrawer({
           <TagInput value={skills} onChange={setSkills} suggestions={skillSuggestions} />
         </Field>
         <Field label="Depends on" hint="Finish-to-start: this task starts after the selected tasks finish.">
-          <DepSelect tasks={otherTasks.map((t) => ({ id: t.id, name: t.name }))} value={deps} onChange={setDeps} />
+          <DepSelect tasks={otherTasks} value={deps} onChange={setDeps} />
         </Field>
         <Field
           label="Start date"
@@ -502,13 +503,26 @@ function DepSelect({
   value,
   onChange,
 }: {
-  tasks: { id: number; name: string }[];
+  tasks: ScheduledTask[];
   value: number[];
   onChange: (v: number[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const toggle = (id: number) =>
     onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
+  // Same group clustering + order as the Task Table / Timeline, so a
+  // predecessor's position in this list matches where the PM already
+  // recognizes it from — not an alphabetical or id-order flat list.
+  const grouped = useMemo(() => groupTasks(tasks), [tasks]);
+  const rows = useMemo(
+    () =>
+      grouped.map((g, idx) => {
+        const prev = grouped[idx - 1];
+        const isNewGroup = !!g.suffix && (idx === 0 || prev.base !== g.base || !prev.suffix);
+        return { ...g, isNewGroup };
+      }),
+    [grouped],
+  );
   if (tasks.length === 0)
     return <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>No other tasks yet</span>;
   return (
@@ -532,7 +546,7 @@ function DepSelect({
                 className="inline-flex items-center gap-1 text-[11px] px-2 h-5 rounded border"
                 style={{ background: "var(--bg-surface-hi)", borderColor: "var(--border-default)", color: "var(--text-secondary)" }}
               >
-                {t.name}
+                {t.groupName ? `${t.groupName} / ${t.name}` : t.name}
                 <button type="button" onClick={() => toggle(id)} className="cursor-pointer opacity-70">
                   ×
                 </button>
@@ -546,21 +560,32 @@ function DepSelect({
           className="absolute left-0 right-0 top-full mt-1 z-20 rounded-md border max-h-52 overflow-auto"
           style={{ background: "var(--bg-surface-hi)", borderColor: "var(--border-default)" }}
         >
-          {tasks.map((t) => (
-            <label
-              key={t.id}
-              className="flex items-center gap-2 px-3 py-1.5 text-[12px] cursor-pointer hover:bg-[var(--bg-surface)]"
-              style={{ color: "var(--text-secondary)" }}
-            >
-              <input
-                type="checkbox"
-                className="!w-auto"
-                checked={value.includes(t.id)}
-                onChange={() => toggle(t.id)}
-              />
-              {t.name}
-            </label>
-          ))}
+          {rows.map(({ t, base, suffix, isNewGroup }) => {
+            return (
+              <Fragment key={t.id}>
+                {isNewGroup && (
+                  <div
+                    className="text-[10px] font-semibold uppercase tracking-[0.03em] px-3 pt-2 pb-1"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    {base}
+                  </div>
+                )}
+                <label
+                  className="flex items-center gap-2 px-3 py-1.5 text-[12px] cursor-pointer hover:bg-[var(--bg-surface)]"
+                  style={{ color: "var(--text-secondary)", paddingLeft: suffix ? 24 : 12 }}
+                >
+                  <input
+                    type="checkbox"
+                    className="!w-auto"
+                    checked={value.includes(t.id)}
+                    onChange={() => toggle(t.id)}
+                  />
+                  {suffix ?? t.name}
+                </label>
+              </Fragment>
+            );
+          })}
         </div>
       )}
     </div>
