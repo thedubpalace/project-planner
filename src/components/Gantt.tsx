@@ -17,6 +17,10 @@ const HEADER_H = 20;
 // or rows visibly drift from their bars as soon as the user scrolls.
 const PANE_HEADER_H = 32;
 const DEFAULT_CAPACITY = 8;
+// Press-vs-drag disambiguation: movement past this radius promotes a
+// press into a drag; anything less resolves as a tap (open edit) on
+// release, no matter how long the press was held.
+const PRESS_MOVE_PX = 6;
 
 function d(iso: string): Date {
   return parseISO(iso + "T00:00:00");
@@ -62,6 +66,7 @@ export function Gantt({
   const bodyRef = useRef<HTMLDivElement>(null);
   const [hover, setHover] = useState<{ taskId: number; x: number; y: number } | null>(null);
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressRef = useRef<{ taskId: number; mode: DragMode; startClientX: number; startClientY: number; pointerId: number } | null>(null);
 
   // detect shifted bars → pulse
   useEffect(() => {
@@ -165,8 +170,11 @@ export function Gantt({
   // Hover is resolved from pointer coordinates against the same bar geometry
   // the bars are drawn from, rather than a DOM overlay — an overlay sitting
   // above the resize/move handles to catch hover would also steal their
-  // pointerdown, breaking drag.
+  // pointerdown, breaking drag. Mouse-only: touch has no real "hover", and
+  // the state churn (timers, setHover re-renders) during a touch's own
+  // press-vs-drag window was interfering with tap-to-edit / drag on mobile.
   const onGridPointerMove = (e: React.PointerEvent) => {
+    if (e.pointerType !== "mouse") return;
     if (drag) return;
     const rect = bodyRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -196,13 +204,8 @@ export function Gantt({
     setHover(null);
   };
 
-  const beginDrag = (e: React.PointerEvent<HTMLElement>, mode: DragMode) => {
-    e.preventDefault();
-    e.stopPropagation();
-    clearHoverTimer();
-    setHover(null);
-    const taskId = Number(e.currentTarget.dataset.taskId);
-    const state: DragState = { taskId, mode, startClientX: e.clientX, deltaDays: 0, pointerId: e.pointerId };
+  const startActualDrag = (taskId: number, mode: DragMode, startClientX: number, pointerId: number) => {
+    const state: DragState = { taskId, mode, startClientX, deltaDays: 0, pointerId };
     dragRef.current = state;
     setDrag(state);
     // Force the cursor for the whole drag — otherwise it reflects whatever
@@ -211,6 +214,79 @@ export function Gantt({
     document.body.style.cursor = mode === "move" ? "move" : "ew-resize";
     document.body.style.userSelect = "none";
   };
+
+  const beginDrag = (e: React.PointerEvent<HTMLElement>, mode: DragMode) => {
+    e.preventDefault();
+    e.stopPropagation();
+    clearHoverTimer();
+    setHover(null);
+    const taskId = Number(e.currentTarget.dataset.taskId);
+    // Every handle (move, both resize edges, actual-end) goes through the
+    // same press-vs-drag disambiguation — on a short/narrow bar the resize
+    // handles' 20px hit areas cover most of the visible width, so a plain
+    // tap anywhere on a short task easily lands on one of them rather than
+    // the move handle; without this they'd silently no-op instead of
+    // opening the drawer.
+    //
+    // Promotion to an actual drag is movement-only, not time-based: an
+    // earlier hold-timer version promoted to drag after a fixed delay even
+    // with zero movement, and a normal human tap's finger-contact time
+    // routinely exceeds that delay — every ordinary tap was silently
+    // getting swallowed into a "drag that never moved" no-op instead of
+    // opening the drawer. Holding still, for any length of time, must
+    // always resolve as a tap on release.
+    pressRef.current = { taskId, mode, startClientX: e.clientX, startClientY: e.clientY, pointerId: e.pointerId };
+  };
+
+  // Always-on (not gated by drag state, since the press phase precedes any
+  // drag state existing) — resolves a pending press into either a tap
+  // (open edit, on release with no promotion) or a promoted drag
+  // (deliberate movement past the threshold), independent of the drag
+  // effect below.
+  useEffect(() => {
+    const clearPress = () => {
+      pressRef.current = null;
+    };
+    const onMove = (e: PointerEvent) => {
+      const p = pressRef.current;
+      if (!p || e.pointerId !== p.pointerId) return;
+      const dx = e.clientX - p.startClientX;
+      const dy = e.clientY - p.startClientY;
+      if (Math.hypot(dx, dy) > PRESS_MOVE_PX) {
+        clearPress();
+        startActualDrag(p.taskId, p.mode, e.clientX, e.pointerId);
+      }
+    };
+    const onUp = (e: PointerEvent) => {
+      const p = pressRef.current;
+      if (!p || e.pointerId !== p.pointerId) return;
+      clearPress();
+      const task = tasks.find((t) => t.id === p.taskId);
+      if (!task) return;
+      // Defer past this tap's own event sequence — mobile browsers fire a
+      // trailing synthetic "click" after pointerup, and if the drawer's
+      // scrim already exists by then (opened synchronously here), that
+      // trailing click lands right on it and immediately closes the drawer
+      // via its click-outside-to-dismiss handler (looks like "flashes open
+      // then vanishes"). Opening on the next tick lets that click resolve
+      // against the old DOM (nothing there) before the drawer ever mounts.
+      setTimeout(() => onEditTask(task), 0);
+    };
+    const onCancel = (e: PointerEvent) => {
+      const p = pressRef.current;
+      if (!p || e.pointerId !== p.pointerId) return;
+      clearPress();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks]);
 
   useEffect(() => {
     if (!drag) return;
