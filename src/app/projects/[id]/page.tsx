@@ -104,6 +104,14 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
 
   return (
     <div className={isTimeline ? "flex flex-col" : undefined} style={isTimeline ? { minHeight: "calc(100dvh - var(--nav-h))" } : undefined}>
+      {/* header + banners + tabs stay pinned below the navbar while the tab
+          content scrolls underneath. Unconditional (not just non-Timeline):
+          on desktop Timeline the outer page never scrolls (Gantt's own
+          panes scroll internally) so this is a no-op there, but on mobile
+          Timeline falls back to a plain growing list with no internal
+          scroll container of its own, so the outer page DOES scroll —
+          without this the header still disappears in exactly that case. */}
+      <div className="sticky z-20" style={{ top: "var(--nav-h)", background: "var(--bg-base)" }}>
       {/* header */}
       <div
         className={`px-4 sm:px-8 py-6${isTimeline ? " shrink-0" : ""}`}
@@ -201,6 +209,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             {t === "timeline" ? "Timeline" : t === "tasks" ? "Tasks" : "Resources"}
           </button>
         ))}
+      </div>
       </div>
 
       {/* tab content */}
