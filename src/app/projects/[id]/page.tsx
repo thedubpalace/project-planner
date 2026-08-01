@@ -96,6 +96,13 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   const over = schedule.risk === "over_deadline";
   const affected = schedule.affectedTaskIds.length;
   const behindTasks = schedule.tasks.filter((t) => t.behindPace);
+  // Named by group, not individual task — a bare task suffix like "Dev" or
+  // "QA" isn't identifiable on its own, and multiple behind-pace tasks in
+  // the same group would otherwise repeat the same context redundantly.
+  // Standalone tasks (no group) fall back to their own name.
+  const behindGroupLabels = Array.from(
+    new Map(behindTasks.map((t) => [t.groupId ?? `t${t.id}`, t.groupName ?? t.name])).values(),
+  );
 
   // Timeline's Gantt wants to fill the viewport (its own panes scroll
   // internally); Tasks/Resources just grow the page naturally — so the
@@ -103,22 +110,44 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   const isTimeline = tab === "timeline";
 
   return (
-    <div className={isTimeline ? "flex flex-col" : undefined} style={isTimeline ? { minHeight: "calc(100dvh - var(--nav-h))" } : undefined}>
+    <div
+      // `min-height` alone never actually bounds the flex-1/min-h-0 chain
+      // below — it's only a floor, so on a project with enough tasks the
+      // Gantt panes just grow to their natural content size instead of
+      // being clipped to "remaining viewport," meaning nothing overflows
+      // internally and the outer page scrolls instead. A real `height` (not
+      // min) is required for the internal-scroll pattern to work. Bound
+      // unconditionally, not just at the desktop breakpoint: the mobile
+      // fallback list now scrolls internally too (Gantt.tsx), so the outer
+      // page never scrolls on Timeline at any size — no page-level scroll
+      // means the sticky project header has nothing to fight for paint
+      // order against, which a scroll-plus-sticky setup kept losing on some
+      // mobile browsers no matter how the stacking was tuned.
+      className={isTimeline ? "flex flex-col h-[calc(100dvh-var(--nav-h))]" : undefined}
+    >
       {/* header + banners + tabs stay pinned below the navbar while the tab
           content scrolls underneath. Unconditional (not just non-Timeline):
           on desktop Timeline the outer page never scrolls (Gantt's own
           panes scroll internally) so this is a no-op there, but on mobile
           Timeline falls back to a plain growing list with no internal
           scroll container of its own, so the outer page DOES scroll —
-          without this the header still disappears in exactly that case. */}
-      <div className="sticky z-20" style={{ top: "var(--nav-h)", background: "var(--bg-base)" }}>
+          without this the header still disappears in exactly that case.
+          `isolation: isolate` forces its own compositing layer/stacking
+          context — on mobile, plain static content (the fallback list's
+          rows) scrolling up from below was intermittently painting ON TOP
+          of this sticky block instead of under it; z-index alone wasn't
+          reliably enough on the affected mobile browser. */}
+      <div
+        className="sticky z-20 shrink-0"
+        style={{ top: "var(--nav-h)", background: "var(--bg-base)", isolation: "isolate" }}
+      >
       {/* header */}
       <div
-        className={`px-4 sm:px-8 py-6${isTimeline ? " shrink-0" : ""}`}
+        className={`px-4 sm:px-8 py-3${isTimeline ? " shrink-0" : ""}`}
         style={{ borderBottom: over || behindTasks.length > 0 ? "none" : "1px solid var(--border-divider)" }}
       >
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-[20px] font-semibold" style={{ color: "var(--text-primary)" }}>
+          <h1 className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
             {project.name}
           </h1>
           <div className="flex items-center gap-2">
@@ -128,7 +157,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             </Button>
           </div>
         </div>
-        <div className="mt-1.5 text-[12px] flex items-center gap-2 flex-wrap" style={{ color: "var(--text-secondary)" }}>
+        <div className="mt-1 text-[12px] flex items-center gap-2 flex-wrap" style={{ color: "var(--text-secondary)" }}>
           <span className="mono">Deadline {fmtDate(project.deadline)}</span>
           <span style={{ color: "var(--text-muted)" }}>·</span>
           <span className="mono" style={{ color: over ? "var(--status-danger-text)" : "var(--text-secondary)" }}>
@@ -141,57 +170,65 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
 
       {/* deadline breach banner */}
       {over && (
-        <div
-          className={`fade-in flex items-center gap-3 px-4 sm:px-8 py-3 flex-wrap${isTimeline ? " shrink-0" : ""}`}
-          style={{ background: "var(--status-danger-bg)", borderBottom: "1px solid var(--status-danger-border)" }}
-        >
-          <span style={{ color: "var(--status-danger-text)" }}>⚠</span>
-          <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>
-            Projected finish{" "}
-            <strong style={{ color: "var(--status-danger-text)" }}>{fmtDate(schedule.projectedFinish)}</strong> exceeds
-            deadline <strong style={{ color: "var(--status-danger-text)" }}>{fmtDate(project.deadline)}</strong> by{" "}
-            <strong style={{ color: "var(--status-danger-text)" }}>{schedule.breachDays} day{schedule.breachDays === 1 ? "" : "s"}</strong>.
-            {affected > 0 && ` ${affected} task${affected === 1 ? " is" : "s are"} affected.`}
-          </span>
-          <button
-            className="ml-auto text-[13px] cursor-pointer hover:underline"
-            style={{ color: "var(--status-danger-text)" }}
-            onClick={() => setTab("timeline")}
-          >
-            View in Timeline →
-          </button>
-        </div>
+        <CollapsibleBanner
+          tone="danger"
+          shrinkOnTimeline={isTimeline}
+          summary={
+            <>
+              Over deadline by{" "}
+              <strong style={{ color: "var(--status-danger-text)" }}>
+                {schedule.breachDays} day{schedule.breachDays === 1 ? "" : "s"}
+              </strong>
+              {affected > 0 && ` · ${affected} task${affected === 1 ? "" : "s"} affected`}
+            </>
+          }
+          detail={
+            <>
+              Projected finish{" "}
+              <strong style={{ color: "var(--status-danger-text)" }}>{fmtDate(schedule.projectedFinish)}</strong>{" "}
+              exceeds deadline{" "}
+              <strong style={{ color: "var(--status-danger-text)" }}>{fmtDate(project.deadline)}</strong> by{" "}
+              <strong style={{ color: "var(--status-danger-text)" }}>
+                {schedule.breachDays} day{schedule.breachDays === 1 ? "" : "s"}
+              </strong>
+              .{affected > 0 && ` ${affected} task${affected === 1 ? " is" : "s are"} affected.`}
+            </>
+          }
+          actionLabel="View in Timeline"
+          onAction={() => setTab("timeline")}
+        />
       )}
 
       {/* behind-pace rollup — separate from the deadline banner: a task can be
           running behind its own planned pace well before that pushes the
           whole project past its deadline */}
       {behindTasks.length > 0 && (
-        <div
-          className={`fade-in flex items-center gap-3 px-4 sm:px-8 py-3 flex-wrap${isTimeline ? " shrink-0" : ""}`}
-          style={{ background: "var(--status-warning-bg)", borderBottom: "1px solid var(--status-warning-border)" }}
-        >
-          <span style={{ color: "var(--status-warning-text)" }}>⚠</span>
-          <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>
-            <strong style={{ color: "var(--status-warning-text)" }}>{behindTasks.length}</strong> task
-            {behindTasks.length === 1 ? " is" : "s are"} behind pace:{" "}
-            {behindTasks.slice(0, 3).map((t, i) => (
-              <span key={t.id}>
-                {i > 0 && ", "}
-                <strong style={{ color: "var(--status-warning-text)" }}>{t.name}</strong>
-              </span>
-            ))}
-            {behindTasks.length > 3 && ` +${behindTasks.length - 3} more`}
-            {" "}— less progress logged than the time already elapsed against plan.
-          </span>
-          <button
-            className="ml-auto text-[13px] cursor-pointer hover:underline"
-            style={{ color: "var(--status-warning-text)" }}
-            onClick={() => setTab("tasks")}
-          >
-            View in Tasks →
-          </button>
-        </div>
+        <CollapsibleBanner
+          tone="warning"
+          shrinkOnTimeline={isTimeline}
+          summary={
+            <>
+              <strong style={{ color: "var(--status-warning-text)" }}>{behindTasks.length}</strong> task
+              {behindTasks.length === 1 ? "" : "s"} behind pace
+            </>
+          }
+          detail={
+            <>
+              <strong style={{ color: "var(--status-warning-text)" }}>{behindTasks.length}</strong> task
+              {behindTasks.length === 1 ? " is" : "s are"} behind pace:{" "}
+              {behindGroupLabels.slice(0, 3).map((label, i) => (
+                <span key={label}>
+                  {i > 0 && ", "}
+                  <strong style={{ color: "var(--status-warning-text)" }}>{label}</strong>
+                </span>
+              ))}
+              {behindGroupLabels.length > 3 && ` +${behindGroupLabels.length - 3} more`}
+              {" "}— less progress logged than the time already elapsed against plan.
+            </>
+          }
+          actionLabel="View in Tasks"
+          onAction={() => setTab("tasks")}
+        />
       )}
 
       {/* tabs */}
@@ -255,6 +292,66 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
           load();
         }}
       />
+    </div>
+  );
+}
+
+// Compact one-line summary by default (icon + summary + chevron); tapping it
+// reveals the full detail sentence and the "jump to tab" action underneath,
+// instead of always taking the full-detail height — these sit inside the
+// sticky header block now, so a permanently-expanded banner would eat into
+// scroll space on every screen, not just the first one.
+function CollapsibleBanner({
+  tone,
+  shrinkOnTimeline,
+  summary,
+  detail,
+  actionLabel,
+  onAction,
+}: {
+  tone: "danger" | "warning";
+  shrinkOnTimeline: boolean;
+  summary: React.ReactNode;
+  detail: React.ReactNode;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const bg = tone === "danger" ? "var(--status-danger-bg)" : "var(--status-warning-bg)";
+  const border = tone === "danger" ? "var(--status-danger-border)" : "var(--status-warning-border)";
+  const text = tone === "danger" ? "var(--status-danger-text)" : "var(--status-warning-text)";
+  return (
+    <div
+      className={`fade-in px-4 sm:px-8 py-2.5${shrinkOnTimeline ? " shrink-0" : ""}`}
+      style={{ background: bg, borderBottom: `1px solid ${border}` }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center gap-2 text-left cursor-pointer"
+      >
+        <span style={{ color: text }}>⚠</span>
+        <span className="text-[13px] flex-1 truncate" style={{ color: "var(--text-primary)" }}>
+          {summary}
+        </span>
+        <span className="text-[11px] shrink-0" style={{ color: text }}>
+          {open ? "▾ Less" : "▸ Details"}
+        </span>
+      </button>
+      {open && (
+        <div className="mt-2 flex items-start gap-3 flex-wrap pl-6">
+          <span className="text-[13px]" style={{ color: "var(--text-primary)" }}>
+            {detail}
+          </span>
+          <button
+            className="ml-auto text-[13px] cursor-pointer hover:underline shrink-0"
+            style={{ color: text }}
+            onClick={onAction}
+          >
+            {actionLabel} →
+          </button>
+        </div>
+      )}
     </div>
   );
 }

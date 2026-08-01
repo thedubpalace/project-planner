@@ -25,13 +25,29 @@ export function Navbar() {
 
   return (
     <nav
-      className="h-14 sticky top-0 z-30 flex items-center gap-8 px-6 border-b"
-      style={{ background: "var(--bg-surface)", borderColor: "var(--border-divider)", boxShadow: "var(--shadow-nav)" }}
+      className="h-14 sticky top-0 z-30 flex items-center gap-3 sm:gap-8 px-3 sm:px-6 border-b"
+      style={{
+        background: "var(--bg-surface)",
+        borderColor: "var(--border-divider)",
+        boxShadow: "var(--shadow-nav)",
+        // Forces its own compositing layer/stacking context — on some
+        // mobile browsers, static page content scrolling up from below
+        // could intermittently paint on top of a sticky element instead of
+        // under it when the sticky element relies on z-index alone.
+        isolation: "isolate",
+      }}
     >
-      <Link href="/" className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
+      {/* h-14 is a fixed height — the wordmark must never wrap onto a second
+          line, since wrapped text overflows straight past this fixed box
+          (default overflow is visible) and bleeds into whatever's rendered
+          right below the nav instead of being clipped or growing the bar.
+          Tighter gaps/padding on narrow screens instead of overflow-x-auto —
+          a scrollbar inside the topbar itself reads as broken chrome, not
+          a real affordance. */}
+      <Link href="/" className="shrink-0 whitespace-nowrap text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
         project-planner
       </Link>
-      <div className="flex items-center gap-6">
+      <div className="flex items-center gap-3 sm:gap-6 shrink-0">
         <Link href="/" className={linkCls(onDashboard)}>
           Projects
         </Link>

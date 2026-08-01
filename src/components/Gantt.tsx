@@ -367,8 +367,12 @@ export function Gantt({
     <>
       {/* mobile fallback — the drag-to-edit Gantt needs more width than a
           phone screen has to stay usable, so small screens get a plain
-          read/tap list instead (tap a row to open the edit drawer) */}
-      <div className="sm:hidden px-6 py-4 flex flex-col gap-2">
+          read/tap list instead (tap a row to open the edit drawer).
+          Scrolls internally now (flex-1 min-h-0 overflow-y-auto) instead of
+          growing the whole page — the outer page-level scroll + sticky
+          project header was intermittently letting this list's own rows
+          paint above the sticky header on some mobile browsers. */}
+      <div className="sm:hidden flex-1 min-h-0 overflow-y-auto px-6 py-4 flex flex-col gap-2">
         <div className="text-[12px] mb-1" style={{ color: "var(--text-muted)" }}>
           View full timeline on a larger screen
         </div>
@@ -814,7 +818,7 @@ function Swatch({ style }: { style: React.CSSProperties }) {
 function Legend() {
   return (
     <div
-      className="hidden sm:flex items-center flex-wrap gap-x-4 gap-y-1 px-3 py-1.5 text-[10px]"
+      className="hidden sm:flex shrink-0 items-center flex-wrap gap-x-4 gap-y-1 px-3 py-1.5 text-[10px]"
       style={{ color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}
     >
       <span className="inline-flex items-center gap-1.5">
@@ -874,7 +878,11 @@ function GanttTooltip({ task: t, x, y }: { task: ScheduledTask; x: number; y: nu
         left,
         top: above ? y - 16 : y + 20,
         transform: above ? "translate(-50%, -100%)" : "translate(-50%, 0)",
-        zIndex: 40,
+        // Below the navbar (z-30) and the project-header sticky block
+        // (z-20) — this is `position: fixed`, so it competes in the root
+        // stacking context same as those, not scoped to the Gantt pane; at
+        // z-40 it would paint over the topbar if hover ever engages.
+        zIndex: 15,
         pointerEvents: "none",
         width: 248,
       }}
