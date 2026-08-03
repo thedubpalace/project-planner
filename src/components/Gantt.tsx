@@ -818,7 +818,12 @@ function Swatch({ style }: { style: React.CSSProperties }) {
 function Legend() {
   return (
     <div
-      className="hidden sm:flex shrink-0 items-center flex-wrap gap-x-4 gap-y-1 px-3 py-1.5 text-[10px]"
+      // mt-2: the sticky header's composited/stuck box and its flex-flow
+      // height (h-[calc(100dvh-var(--nav-h))] on the root — dvh doesn't
+      // always resolve to a whole pixel) can drift a few px apart, leaving
+      // this row's top edge painted under the sticky block and clipping
+      // letter ascenders — a buffer clears it regardless of the exact drift.
+      className="hidden sm:flex shrink-0 items-center flex-wrap gap-x-4 gap-y-1 px-3 py-1.5 mt-2 text-[10px]"
       style={{ color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}
     >
       <span className="inline-flex items-center gap-1.5">

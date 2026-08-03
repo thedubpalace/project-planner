@@ -143,28 +143,43 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
       >
       {/* header */}
       <div
-        className={`px-4 sm:px-8 py-3${isTimeline ? " shrink-0" : ""}`}
+        className={`px-3 sm:px-8 py-1.5${isTimeline ? " shrink-0" : ""}`}
         style={{ borderBottom: over || behindTasks.length > 0 ? "none" : "1px solid var(--border-divider)" }}
       >
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-[16px] font-semibold" style={{ color: "var(--text-primary)" }}>
-            {project.name}
-          </h1>
-          <div className="flex items-center gap-2">
+        <div className="flex items-start justify-between gap-2 flex-wrap">
+          {/* Name + deadline + projected finish share one flex-wrap group —
+              same line when there's room (landscape), natural reflow when
+              there isn't. Portrait has room for the name but not the dates
+              alongside it, and letting flex-wrap break wherever a word
+              happens to run out of room reads as broken, not compact — the
+              portrait-only spacer below forces one deliberate break instead,
+              a clean two lines every time: name, then dates. */}
+          <div className="flex items-baseline gap-x-1.5 gap-y-0 flex-wrap min-w-0">
+            <h1 className="text-[14px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+              {project.name}
+            </h1>
+            <span className="hidden portrait:block portrait:basis-full portrait:h-0" aria-hidden />
+            <span className="text-[11px] mono whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
+              <span className="portrait:hidden">– </span>Deadline {fmtDate(project.deadline)}
+            </span>
+            <span style={{ color: "var(--text-muted)" }}>·</span>
+            <span
+              className="text-[11px] mono whitespace-nowrap"
+              style={{ color: over ? "var(--status-danger-text)" : "var(--text-secondary)" }}
+            >
+              Projected finish {fmtDate(schedule.projectedFinish)}
+            </span>
+            <span className="hidden sm:inline" style={{ color: "var(--text-muted)" }}>·</span>
+            <span className="hidden sm:inline text-[11px] whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
+              {schedule.tasks.length} tasks
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
             <StatusPill variant={RISK_PILL[schedule.risk]} />
             <Button variant="secondary" size="sm" onClick={() => setProjFormOpen(true)}>
               Edit
             </Button>
           </div>
-        </div>
-        <div className="mt-1 text-[12px] flex items-center gap-2 flex-wrap" style={{ color: "var(--text-secondary)" }}>
-          <span className="mono">Deadline {fmtDate(project.deadline)}</span>
-          <span style={{ color: "var(--text-muted)" }}>·</span>
-          <span className="mono" style={{ color: over ? "var(--status-danger-text)" : "var(--text-secondary)" }}>
-            Projected finish {fmtDate(schedule.projectedFinish)}
-          </span>
-          <span style={{ color: "var(--text-muted)" }}>·</span>
-          <span>{schedule.tasks.length} tasks</span>
         </div>
       </div>
 
