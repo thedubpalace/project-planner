@@ -2,7 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { Button, Drawer, Field, SkillChip, StatusPill, WorkloadBar, fmtShifted, taskPill, useToast } from "./ui";
-import { ProgressSlider, Segmented } from "./TaskTable";
+import { ProgressControl } from "./TaskTable";
 import { TagInput } from "./TagInput";
 import { api } from "@/lib/client";
 import { rankCandidates } from "@/lib/schedule";
@@ -201,10 +201,7 @@ export function TaskDrawer({
                   />
                 )}
               </div>
-              <div className="flex items-center gap-3">
-                <ProgressSlider value={progress} onCommit={commitProgress} width={120} />
-                <Segmented value={progress} onChange={commitProgress} />
-              </div>
+              <ProgressControl value={progress} onCommit={commitProgress} width={160} />
             </div>
           </Field>
         )}

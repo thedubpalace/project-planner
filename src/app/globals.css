@@ -161,55 +161,12 @@ select:focus {
   border-color: var(--border-focus);
 }
 
-/* progress slider — overrides the generic bordered/padded input look above */
-input[type="range"].progress-slider {
-  -webkit-appearance: none;
-  appearance: none;
-  width: auto;
-  height: 6px;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: var(--bg-surface-hi);
-  cursor: pointer;
-}
-input[type="range"].progress-slider:focus {
-  border: none;
-  outline: 2px solid var(--accent-border);
-  outline-offset: 2px;
-}
-
 /* Gantt drag handles — plain divs made keyboard-operable (tabIndex + arrow
    keys); focus-visible only shows the ring for keyboard nav, not the
    pointerdown that also focuses them on click. */
 .gantt-handle:focus-visible {
   outline: 2px solid var(--accent-border);
   outline-offset: 2px;
-}
-input[type="range"].progress-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--bg-surface);
-  box-shadow: 0 0 0 1px var(--accent-border);
-  cursor: pointer;
-}
-input[type="range"].progress-slider::-moz-range-thumb {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--bg-surface);
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-border);
-  cursor: pointer;
-}
-input[type="range"].progress-slider::-moz-range-track {
-  height: 6px;
-  border-radius: 999px;
-  background: transparent;
 }
 
 /* skeleton pulse */

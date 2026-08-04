@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import type { ProjectSchedule, ScheduledTask, TaskGroup } from "@/lib/types";
 import { groupTasks } from "@/lib/taskGroup";
@@ -12,8 +12,6 @@ import {
   taskPill,
   useToast,
 } from "./ui";
-
-const STEPS = [0, 25, 50, 75, 100];
 
 export function TaskTable({
   schedule,
@@ -302,7 +300,7 @@ export function TaskTable({
                   )}
                   <span className="mono">{t.estimationHours}h</span>
                 </div>
-                <ProgressSlider value={t.progress} onCommit={(p) => setProgress(t, p)} width={140} />
+                <ProgressControl value={t.progress} onCommit={(p) => setProgress(t, p)} width={140} />
                 {t.status === "done" && (
                   <input
                     type="date"
@@ -546,10 +544,7 @@ export function TaskTable({
                   )}
                 </td>
                 <td className="px-3 py-1.5">
-                  <div className="flex flex-col items-start gap-1">
-                    <ProgressSlider value={t.progress} onCommit={(p) => setProgress(t, p)} width={90} />
-                    <Segmented value={t.progress} onChange={(p) => setProgress(t, p)} />
-                  </div>
+                  <ProgressControl value={t.progress} onCommit={(p) => setProgress(t, p)} width={90} />
                 </td>
                 <td className="px-3 py-1.5">
                   <div className="flex items-center gap-1.5">
@@ -673,65 +668,78 @@ function Toolbar({
   );
 }
 
-// Draggable 1% slider — replaces the old static ProgressBar. Live value
-// updates on every drag tick for instant visual feedback; the API call
-// (onCommit) only fires on release, so dragging doesn't spam PATCH requests.
-export function ProgressSlider({ value, onCommit, width = 90 }: { value: number; onCommit: (p: number) => void; width?: number }) {
+// Single-row progress control — click anywhere on the track to jump straight
+// to that value, drag for fine 1% adjustment, arrow keys for keyboard. Merges
+// what used to be two stacked controls (a native range slider plus a row of
+// quick-pick buttons): a native <input type=range> in Chrome only nudges by
+// one step on a click instead of jumping to the click position, so the
+// button row existed just to let a click land on a round number. A custom
+// pointer-driven track gets both behaviors in one control, one row tall.
+export function ProgressControl({ value, onCommit, width = 90 }: { value: number; onCommit: (p: number) => void; width?: number }) {
   const [live, setLive] = useState(value);
   useEffect(() => setLive(value), [value]);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
 
-  const commit = (e: React.SyntheticEvent<HTMLInputElement>) => onCommit(Number(e.currentTarget.value));
+  const pctFromClientX = (clientX: number) => {
+    const rect = trackRef.current!.getBoundingClientRect();
+    return Math.max(0, Math.min(100, Math.round(((clientX - rect.left) / rect.width) * 100)));
+  };
+
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    draggingRef.current = true;
+    setLive(pctFromClientX(e.clientX));
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current) return;
+    setLive(pctFromClientX(e.clientX));
+  };
+  const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current) return;
+    draggingRef.current = false;
+    onCommit(pctFromClientX(e.clientX));
+  };
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const step = e.shiftKey ? 10 : 1;
+    let next: number | null = null;
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") next = Math.max(0, live - step);
+    else if (e.key === "ArrowRight" || e.key === "ArrowUp") next = Math.min(100, live + step);
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = 100;
+    if (next == null) return;
+    e.preventDefault();
+    setLive(next);
+    onCommit(next);
+  };
 
   return (
     <div className="flex items-center gap-2">
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={1}
-        value={live}
-        onChange={(e) => setLive(Number(e.target.value))}
-        onMouseUp={commit}
-        onTouchEnd={commit}
-        onKeyUp={commit}
-        className="progress-slider"
-        style={{
-          width,
-          background: `linear-gradient(to right, var(--accent) ${live}%, var(--bg-surface-hi) ${live}%)`,
-        }}
+      <div
+        ref={trackRef}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onKeyDown={onKeyDown}
+        tabIndex={0}
+        role="slider"
+        aria-valuenow={live}
+        aria-valuemin={0}
+        aria-valuemax={100}
         aria-label="Progress"
-      />
+        className="relative h-1.5 rounded-full shrink-0 cursor-pointer touch-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-border)]"
+        style={{ width, background: "var(--bg-surface-hi)" }}
+      >
+        <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${live}%`, background: "var(--accent)" }} />
+        {/* quick-reference ticks — visual only, not separate hit targets;
+            clicking/dragging anywhere on the track already jumps there */}
+        {[25, 50, 75].map((t) => (
+          <div key={t} className="absolute top-1/2 -translate-y-1/2 w-px h-2.5" style={{ left: `${t}%`, background: "var(--bg-base)" }} />
+        ))}
+      </div>
       <span className="text-[11px] mono shrink-0" style={{ color: "var(--text-secondary)", minWidth: 26 }}>
         {live}%
       </span>
-    </div>
-  );
-}
-
-export function Segmented({ value, onChange }: { value: number; onChange: (p: number) => void }) {
-  return (
-    <div className="inline-flex rounded overflow-hidden border" style={{ borderColor: "var(--border-default)" }}>
-      {STEPS.map((s, i) => {
-        // Each box only darkens across its own segment (previous step, this
-        // step] — box 75 goes from empty at 50% to full at 75%, and box 100
-        // stays untouched until value passes 75. Box 0 is trivially full.
-        const prev = STEPS[i - 1] ?? 0;
-        const intensity = s === 0 ? 1 : Math.max(0, Math.min(1, (value - prev) / (s - prev)));
-        return (
-          <button
-            key={s}
-            onClick={() => onChange(s)}
-            className="text-[10px] w-6 min-w-0 h-5 flex items-center justify-center cursor-pointer transition-colors"
-            style={{
-              background: `color-mix(in oklch, var(--accent) ${Math.round(intensity * 100)}%, transparent)`,
-              color: intensity >= 0.5 ? "var(--text-on-accent)" : "var(--text-muted)",
-              borderLeft: s !== 0 ? "1px solid var(--border-default)" : "none",
-            }}
-          >
-            {s}
-          </button>
-        );
-      })}
     </div>
   );
 }
