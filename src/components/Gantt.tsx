@@ -411,7 +411,15 @@ export function Gantt({
           screen wide enough to show it (tablet landscape, etc.) can still
           drag the bars, not just mouse users */}
       <Legend />
-      <div className="hidden sm:flex flex-1 min-h-0" style={{ minHeight: 360 }}>
+      {/* No hardcoded minHeight here — an inline min-height would win over
+          the min-h-0 class (inline style always beats a class for the same
+          property) and stop this row shrinking below that floor. On a short
+          viewport that's still wide enough to hit the sm: breakpoint (e.g.
+          phone landscape), that forced the row taller than the page's fixed
+          h-[calc(100dvh-var(--nav-h))] budget, and with nothing above set to
+          overflow-hidden, the whole page (navbar included) became
+          touch-scrollable instead of just this row's own internal panes. */}
+      <div className="hidden sm:flex flex-1 min-h-0">
         {/* left pane */}
         <div
           ref={leftRef}
@@ -419,7 +427,11 @@ export function Gantt({
           className="shrink-0 overflow-y-auto"
           style={{ width: 260, borderRight: "1px solid var(--border-divider)" }}
         >
-          <div className="sticky top-0 z-10 flex items-center px-3 text-[11px] font-medium uppercase tracking-[0.04em]"
+          {/* z-21: must clear the page-level project-header sticky block
+              (z-20, isolate — page.tsx), not just the date-header pane next
+              to it, or this corner label paints underneath the project name
+              on any scroll overlap. Matches the date-header's z-21 below. */}
+          <div className="sticky top-0 z-[21] flex items-center px-3 text-[11px] font-medium uppercase tracking-[0.04em]"
             style={{ height: PANE_HEADER_H, background: "var(--bg-surface)", color: "var(--text-muted)", borderBottom: "1px solid var(--border-divider)" }}>
             Task
           </div>
@@ -466,9 +478,11 @@ export function Gantt({
         {/* grid */}
         <div ref={gridRef} onScroll={() => syncScroll("grid")} className="flex-1 overflow-auto relative">
           <div style={{ width: model.gridWidth, position: "relative" }}>
-            {/* date header */}
+            {/* date header — z-21 to clear the page-level project-header
+                sticky block (z-20, isolate — page.tsx), same reasoning as
+                the corner "Task" label to its left */}
             <div
-              className="sticky top-0 z-20 flex"
+              className="sticky top-0 z-[21] flex"
               style={{ height: PANE_HEADER_H, background: "var(--bg-surface)", borderBottom: "1px solid var(--border-divider)" }}
             >
               {model.columns.map((c, i) => (
