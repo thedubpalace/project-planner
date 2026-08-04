@@ -498,7 +498,7 @@ function ProjectResources({
           <thead>
             <tr style={{ background: "var(--bg-surface)" }}>
               {["Resource", "Skills", "This project", "Load (this week, all projects)"].map((h) => (
-                <th key={h} className="px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-[0.04em]" style={{ color: "var(--text-muted)" }}>
+                <th key={h} className="px-3 py-1.5 text-left text-[11px] font-medium uppercase tracking-[0.04em]" style={{ color: "var(--text-muted)" }}>
                   {h}
                 </th>
               ))}
@@ -509,21 +509,21 @@ function ProjectResources({
               const count = schedule.tasks.filter((t) => t.resourceId === r.id).length;
               return (
                 <tr key={r.id} className="border-t" style={{ borderColor: "var(--border-divider)" }}>
-                  <td className="px-3 py-2.5 text-[13px]" style={{ color: "var(--text-primary)" }}>
+                  <td className="px-3 py-1.5 text-[13px]" style={{ color: "var(--text-primary)" }}>
                     {r.name}
                     {r.weekHours > r.weekCapacity && <span className="ml-2"><StatusPill variant="overallocated" /></span>}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-1.5">
                     <div className="flex flex-wrap gap-1">
                       {r.skills.map((s) => (
                         <SkillChip key={s} tag={s} />
                       ))}
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-[12px]" style={{ color: "var(--text-secondary)" }}>
+                  <td className="px-3 py-1.5 text-[12px]" style={{ color: "var(--text-secondary)" }}>
                     {count} task{count === 1 ? "" : "s"}
                   </td>
-                  <td className="px-3 py-2.5">
+                  <td className="px-3 py-1.5">
                     <WorkloadBar hours={r.weekHours} capacity={r.weekCapacity} />
                   </td>
                 </tr>

@@ -333,7 +333,7 @@ export function TaskTable({
               {["Task", "Skills", "Est.", "Resource", "Progress", "Status", "Deps", ""].map((h) => (
                 <th
                   key={h}
-                  className="px-3 py-2.5 text-left text-[11px] font-medium uppercase tracking-[0.04em]"
+                  className="px-3 py-1.5 text-left text-[11px] font-medium uppercase tracking-[0.04em]"
                   style={{ color: "var(--text-muted)" }}
                 >
                   {h}
@@ -405,7 +405,7 @@ export function TaskTable({
                     >
                       <td
                         colSpan={8}
-                        className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.04em]"
+                        className="px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.03em]"
                         style={{ color: "var(--text-muted)", background: "var(--bg-surface-hi)" }}
                       >
                         <span className="inline-flex items-center gap-1">
@@ -494,7 +494,7 @@ export function TaskTable({
                     {...taskRowDragProps}
                   >
                 <td
-                  className={`py-2.5 text-[13px] cursor-pointer ${suffix ? "pl-6 pr-3" : "px-3"}`}
+                  className={`py-1.5 text-[13px] cursor-pointer ${suffix ? "pl-6 pr-3" : "px-3"}`}
                   style={{ color: "var(--text-primary)" }}
                   onClick={() => onEdit(t)}
                 >
@@ -517,7 +517,7 @@ export function TaskTable({
                   </span>
                   {suffix ? suffix : t.name}
                 </td>
-                <td className="px-3 py-2.5">
+                <td className="px-3 py-1.5">
                   <div className="flex flex-wrap gap-1">
                     {t.skills.slice(0, 2).map((s) => (
                       <SkillChip key={s} tag={s} />
@@ -529,10 +529,10 @@ export function TaskTable({
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-2.5 text-[12px] mono" style={{ color: "var(--text-secondary)" }}>
+                <td className="px-3 py-1.5 text-[12px] mono" style={{ color: "var(--text-secondary)" }}>
                   {t.estimationHours}h
                 </td>
-                <td className="px-3 py-2.5 text-[12px]">
+                <td className="px-3 py-1.5 text-[12px]">
                   {t.isUnassigned ? (
                     <button
                       className="cursor-pointer"
@@ -545,14 +545,14 @@ export function TaskTable({
                     <span style={{ color: "var(--text-secondary)" }}>{t.resourceName}</span>
                   )}
                 </td>
-                <td className="px-3 py-2.5">
+                <td className="px-3 py-1.5">
                   <div className="flex flex-col items-start gap-1">
                     <ProgressSlider value={t.progress} onCommit={(p) => setProgress(t, p)} width={90} />
                     <Segmented value={t.progress} onChange={(p) => setProgress(t, p)} />
                   </div>
                 </td>
-                <td className="px-3 py-2.5">
-                  <div className="flex flex-col items-start gap-1">
+                <td className="px-3 py-1.5">
+                  <div className="flex items-center gap-1.5">
                     <StatusPill variant={taskPill(t.status, t.isUnassigned, t.overDeadline, t.behindPace)} />
                     {t.status === "done" && (
                       <input
@@ -566,7 +566,7 @@ export function TaskTable({
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-2.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
+                <td className="px-3 py-1.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
                   {t.dependsOn.length
                     ? t.dependsOn
                         .map((id) => tasks.find((x) => x.id === id)?.name)
@@ -574,7 +574,7 @@ export function TaskTable({
                         .join(", ")
                     : "—"}
                 </td>
-                <td className="px-3 py-2.5 text-right whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
+                <td className="px-3 py-1.5 text-right whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
                   <Button variant="ghost" size="sm" onClick={() => onEdit(t)}>
                     Edit
                   </Button>
