@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/client";
 import type { Project, ProjectSchedule, ResourceLoad, ScheduledTask, TaskGroup } from "@/lib/types";
@@ -39,6 +39,22 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<ScheduledTask | null>(null);
   const [projFormOpen, setProjFormOpen] = useState(false);
+
+  // Below sm, the header row and tabs row stick independently (banners
+  // scroll past between them) instead of one combined sticky block — so the
+  // tabs row's own sticky offset must sit right under the header row's
+  // *actual* rendered height (it varies: portrait mode wraps the name/dates
+  // onto a second line). Unused at sm and up, where the single sticky
+  // wrapper still handles all four pieces together.
+  const headerRowRef = useRef<HTMLDivElement>(null);
+  const [headerRowH, setHeaderRowH] = useState(0);
+  useEffect(() => {
+    const el = headerRowRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setHeaderRowH(entry.contentRect.height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -109,80 +125,49 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
   // fill-to-available-space flex chain below is scoped to this tab only.
   const isTimeline = tab === "timeline";
 
-  return (
-    <div
-      // `min-height` alone never actually bounds the flex-1/min-h-0 chain
-      // below — it's only a floor, so on a project with enough tasks the
-      // Gantt panes just grow to their natural content size instead of
-      // being clipped to "remaining viewport," meaning nothing overflows
-      // internally and the outer page scrolls instead. A real `height` (not
-      // min) is required for the internal-scroll pattern to work. Bound
-      // unconditionally, not just at the desktop breakpoint: the mobile
-      // fallback list now scrolls internally too (Gantt.tsx), so the outer
-      // page never scrolls on Timeline at any size — no page-level scroll
-      // means the sticky project header has nothing to fight for paint
-      // order against, which a scroll-plus-sticky setup kept losing on some
-      // mobile browsers no matter how the stacking was tuned.
-      className={isTimeline ? "flex flex-col h-[calc(100dvh-var(--nav-h))]" : undefined}
-    >
-      {/* header + banners + tabs stay pinned below the navbar while the tab
-          content scrolls underneath. Unconditional (not just non-Timeline):
-          on desktop Timeline the outer page never scrolls (Gantt's own
-          panes scroll internally) so this is a no-op there, but on mobile
-          Timeline falls back to a plain growing list with no internal
-          scroll container of its own, so the outer page DOES scroll —
-          without this the header still disappears in exactly that case.
-          `isolation: isolate` forces its own compositing layer/stacking
-          context — on mobile, plain static content (the fallback list's
-          rows) scrolling up from below was intermittently painting ON TOP
-          of this sticky block instead of under it; z-index alone wasn't
-          reliably enough on the affected mobile browser. */}
-      <div
-        className="sticky z-20 shrink-0"
-        style={{ top: "var(--nav-h)", background: "var(--bg-base)", isolation: "isolate" }}
-      >
-      {/* header */}
-      <div
-        className={`px-3 sm:px-8 py-1.5${isTimeline ? " shrink-0" : ""}`}
-        style={{ borderBottom: over || behindTasks.length > 0 ? "none" : "1px solid var(--border-divider)" }}
-      >
-        <div className="flex items-start justify-between gap-2 flex-wrap">
-          {/* Name + deadline + projected finish share one flex-wrap group —
-              same line when there's room (landscape), natural reflow when
-              there isn't. Portrait has room for the name but not the dates
-              alongside it, and letting flex-wrap break wherever a word
-              happens to run out of room reads as broken, not compact — the
-              portrait-only spacer below forces one deliberate break instead,
-              a clean two lines every time: name, then dates. */}
-          <div className="flex items-baseline gap-x-1.5 gap-y-0 flex-wrap min-w-0">
-            <h1 className="text-[14px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>
-              {project.name}
-            </h1>
-            <span className="hidden portrait:block portrait:basis-full portrait:h-0" aria-hidden />
-            <span className="text-[11px] mono whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
-              <span className="portrait:hidden">– </span>Deadline {fmtDate(project.deadline)}
-            </span>
-            <span style={{ color: "var(--text-muted)" }}>·</span>
-            <span
-              className="text-[11px] mono whitespace-nowrap"
-              style={{ color: over ? "var(--status-danger-text)" : "var(--text-secondary)" }}
-            >
-              Projected finish {fmtDate(schedule.projectedFinish)}
-            </span>
-            <span className="hidden sm:inline" style={{ color: "var(--text-muted)" }}>·</span>
-            <span className="hidden sm:inline text-[11px] whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
-              {schedule.tasks.length} tasks
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <StatusPill variant={RISK_PILL[schedule.risk]} />
-            <Button variant="secondary" size="sm" onClick={() => setProjFormOpen(true)}>
-              Edit
-            </Button>
-          </div>
-        </div>
+  // Shared between the desktop (sm+) single sticky block and the mobile
+  // (<sm) split-sticky layout below — same markup, rendered into two
+  // different sticky containers rather than duplicated by hand.
+  const headerInner = (
+    <div className="flex items-start justify-between gap-2 flex-wrap">
+      {/* Name + deadline + projected finish share one flex-wrap group —
+          same line when there's room (landscape), natural reflow when
+          there isn't. Portrait has room for the name but not the dates
+          alongside it, and letting flex-wrap break wherever a word
+          happens to run out of room reads as broken, not compact — the
+          portrait-only spacer below forces one deliberate break instead,
+          a clean two lines every time: name, then dates. */}
+      <div className="flex items-baseline gap-x-1.5 gap-y-0 flex-wrap min-w-0">
+        <h1 className="text-[14px] font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+          {project.name}
+        </h1>
+        <span className="hidden portrait:block portrait:basis-full portrait:h-0" aria-hidden />
+        <span className="text-[11px] mono whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
+          <span className="portrait:hidden">– </span>Deadline {fmtDate(project.deadline)}
+        </span>
+        <span style={{ color: "var(--text-muted)" }}>·</span>
+        <span
+          className="text-[11px] mono whitespace-nowrap"
+          style={{ color: over ? "var(--status-danger-text)" : "var(--text-secondary)" }}
+        >
+          Projected finish {fmtDate(schedule.projectedFinish)}
+        </span>
+        <span className="hidden sm:inline" style={{ color: "var(--text-muted)" }}>·</span>
+        <span className="hidden sm:inline text-[11px] whitespace-nowrap" style={{ color: "var(--text-secondary)" }}>
+          {schedule.tasks.length} tasks
+        </span>
       </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <StatusPill variant={RISK_PILL[schedule.risk]} />
+        <Button variant="secondary" size="sm" onClick={() => setProjFormOpen(true)}>
+          Edit
+        </Button>
+      </div>
+    </div>
+  );
 
+  const banners = (
+    <>
       {/* deadline breach banner */}
       {over && (
         <CollapsibleBanner
@@ -245,23 +230,98 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
           onAction={() => setTab("tasks")}
         />
       )}
+    </>
+  );
 
-      {/* tabs */}
-      <div className={`flex items-center gap-4 sm:gap-6 px-4 sm:px-8 overflow-x-auto${isTimeline ? " shrink-0" : ""}`} style={{ borderBottom: "1px solid var(--border-divider)" }}>
-        {(["timeline", "tasks", "resources"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className="h-10 text-[13px] font-medium border-b-2 capitalize cursor-pointer transition-colors"
-            style={{
-              color: tab === t ? "var(--text-primary)" : "var(--text-secondary)",
-              borderColor: tab === t ? "var(--accent)" : "transparent",
-            }}
-          >
-            {t === "timeline" ? "Timeline" : t === "tasks" ? "Tasks" : "Resources"}
-          </button>
-        ))}
+  const tabsInner = (["timeline", "tasks", "resources"] as Tab[]).map((t) => (
+    <button
+      key={t}
+      onClick={() => setTab(t)}
+      className="h-10 text-[13px] font-medium border-b-2 capitalize cursor-pointer transition-colors"
+      style={{
+        color: tab === t ? "var(--text-primary)" : "var(--text-secondary)",
+        borderColor: tab === t ? "var(--accent)" : "transparent",
+      }}
+    >
+      {t === "timeline" ? "Timeline" : t === "tasks" ? "Tasks" : "Resources"}
+    </button>
+  ));
+
+  return (
+    <div
+      // `min-height` alone never actually bounds the flex-1/min-h-0 chain
+      // below — it's only a floor, so on a project with enough tasks the
+      // Gantt panes just grow to their natural content size instead of
+      // being clipped to "remaining viewport," meaning nothing overflows
+      // internally and the outer page scrolls instead. A real `height` (not
+      // min) is required for the internal-scroll pattern to work. Bound
+      // unconditionally, not just at the desktop breakpoint: the mobile
+      // fallback list now scrolls internally too (Gantt.tsx), so the outer
+      // page never scrolls on Timeline at any size — no page-level scroll
+      // means the sticky project header has nothing to fight for paint
+      // order against, which a scroll-plus-sticky setup kept losing on some
+      // mobile browsers no matter how the stacking was tuned.
+      className={isTimeline ? "flex flex-col h-[calc(100dvh-var(--nav-h))]" : undefined}
+    >
+      {/* ===== desktop (sm and up): header + banners + tabs as one sticky
+          unit, unchanged from before. Its containing block is this root
+          div (spans the full page), so it has room to stay stuck for the
+          whole scroll. `isolation: isolate` forces its own compositing
+          layer/stacking context — on mobile, plain static content
+          scrolling up from below was intermittently painting ON TOP of a
+          sticky block instead of under it; z-index alone wasn't reliably
+          enough on the affected mobile browser (kept here too in case a
+          tablet-width device hits this same rendering path). */}
+      <div
+        className="hidden sm:block sm:sticky sm:z-20 sm:shrink-0"
+        style={{ top: "var(--nav-h)", background: "var(--bg-base)", isolation: "isolate" }}
+      >
+        <div
+          className={`px-3 sm:px-8 py-1.5${isTimeline ? " shrink-0" : ""}`}
+          style={{ borderBottom: over || behindTasks.length > 0 ? "none" : "1px solid var(--border-divider)" }}
+        >
+          {headerInner}
+        </div>
+        {banners}
+        <div
+          className={`flex items-center gap-4 sm:gap-6 px-4 sm:px-8 overflow-x-auto${isTimeline ? " shrink-0" : ""}`}
+          style={{ borderBottom: "1px solid var(--border-divider)" }}
+        >
+          {tabsInner}
+        </div>
       </div>
+
+      {/* ===== mobile (<sm): header row and tabs row stick independently;
+          banners sit in normal flow between them and scroll past instead
+          of staying pinned. Both are DIRECT children of this root div (not
+          nested inside a shared wrapper) so their sticky containing block
+          is the full page — nesting them inside a wrapper that only spans
+          header+banners+tabs' own height would give them almost no room to
+          stay stuck before popping back into normal flow and scrolling
+          away with the rest of the page, past the navbar. */}
+      <div
+        ref={headerRowRef}
+        className={`sm:hidden sticky z-20 px-3 py-1.5${isTimeline ? " shrink-0" : ""}`}
+        style={{
+          top: "var(--nav-h)",
+          background: "var(--bg-base)",
+          isolation: "isolate",
+          borderBottom: over || behindTasks.length > 0 ? "none" : "1px solid var(--border-divider)",
+        }}
+      >
+        {headerInner}
+      </div>
+      <div className={`sm:hidden${isTimeline ? " shrink-0" : ""}`}>{banners}</div>
+      <div
+        className={`sm:hidden sticky z-20 flex items-center gap-4 px-4 overflow-x-auto${isTimeline ? " shrink-0" : ""}`}
+        style={{
+          top: `calc(var(--nav-h) + ${headerRowH}px)`,
+          background: "var(--bg-base)",
+          isolation: "isolate",
+          borderBottom: "1px solid var(--border-divider)",
+        }}
+      >
+        {tabsInner}
       </div>
 
       {/* tab content */}
